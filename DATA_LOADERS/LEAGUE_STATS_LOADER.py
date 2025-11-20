@@ -28,25 +28,22 @@ class LeagueLoader:
         
         row = df.iloc[0]
         
-        base_factors = {
-            'SO': float(row['STRIKEOUT']),
-            'BB': float(row['WALK']),
-            'HP': float(row['HITBYPITCH']),
-            'HR': float(row['HOMERUN'])
-        }
-
-        hit_factors = {
-            'IH': float(row['INFIELDS']),
-            'SL': float(row['SINGLE']),
-            'DL': float(row['DOUBLE']),
-            'TL': float(row['TRIPLE']),
+        # Load all factors into a single flat dictionary
+        factors = {
+            'SO': float(row['SO']),
+            'BB': float(row['BB']),
+            'HP': float(row['HP']),
+            'HR': float(row['HR']),
+            'IH': float(row['IH']),
+            'SL': float(row['SL']),
+            'DL': float(row['DL']),
+            'TL': float(row['TL']),
+            'BABIP': float(row['BABIP']),
+            'GBFB': float(row['GBFB'])
         }
 
         return LeagueData(
             year=int(row['YEAR']),
-            babip_factor=float(row['BABIP']),
-            base_factors=base_factors,
-            hit_factors=hit_factors,
-            gbfb_factor=float(row['GBFB'])
+            factors=factors
         )
     

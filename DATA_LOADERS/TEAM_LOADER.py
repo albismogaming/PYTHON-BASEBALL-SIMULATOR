@@ -1,10 +1,9 @@
 import pandas as pd
 from CONTEXT.TEAM_CONTEXT import Team
 from CONTEXT.PLAYER_CONTEXT import Player
-from CONTEXT.STADIUM_CONTEXT import Stadium
 
 class TeamLoader:
-    """Static methods for loading teams with rosters and stadiums."""
+    """Static methods for loading teams with rosters and park factors."""
     
     @staticmethod
     def load_team_metadata(csv_path: str) -> dict:
@@ -33,20 +32,20 @@ class TeamLoader:
                       roster_csv: str,
                       teams_csv: str) -> Team:
         """
-        Load complete team (metadata + roster + stadium) for simulation.
+        Load complete team (metadata + roster + park factors) for simulation.
         
         Args:
             team_abbrev: Team abbreviation (e.g., "NYY", "LAD")
             roster_csv: Path to team's roster CSV (e.g., "GAME_DATA/TEAMS/LAD/LAD_BAT.csv")
-            teams_csv: Path to TEAMS.csv (includes stadium/park factors)
+            teams_csv: Path to TEAMS.csv (includes park factors)
             
         Returns:
-            Team object with complete roster and stadium loaded
+            Team object with complete roster and park factors loaded
         """
-        # Load metadata + stadium data from single CSV
+        # Load metadata + park factor data from single CSV
         metadata = TeamLoader.load_team_metadata(teams_csv)[team_abbrev]
         
-        # Build Stadium from metadata row with park_factors dictionary
+        # Extract park factors from metadata row
         park_factors = {
             'SL': metadata.get('single_factor', 1.0),
             'DL': metadata.get('double_factor', 1.0),
@@ -55,11 +54,7 @@ class TeamLoader:
             'GBFB': metadata.get('gbfb_factor', 1.0)
         }
         
-        stadium = Stadium(
-            stadium_name=metadata.get('stadium_name', f"{metadata['market']} Stadium"),
-            team_abbrev=team_abbrev,
-            park_factors=park_factors
-        )
+        stadium_name = metadata.get('stadium_name', f"{metadata['market']} Stadium")
         
         # Load roster (batters and pitchers in one file)
         try:
@@ -90,7 +85,8 @@ class TeamLoader:
             name=metadata['team_name'],
             abbreviation=team_abbrev,
             market=metadata.get('market', team_abbrev),
-            stadium=stadium,
+            stadium_name=stadium_name,
+            park_factors=park_factors,
             batters=batters,
             pitchers=pitchers,
             wins=metadata.get('wins', 0),
