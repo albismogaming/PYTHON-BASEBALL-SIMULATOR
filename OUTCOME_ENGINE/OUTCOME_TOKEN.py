@@ -1,70 +1,71 @@
-from ATBAT.ATBAT_PROBS import ProbabilityCalculator
-from CONTEXT.STADIUM_CONTEXT import Stadium
-from CONTEXT.TOKEN_CONTEXT import Token
-from OUTCOME_ENGINE.OUTCOME_BUILDER import OutcomeBuilder
-from datetime import datetime
+from ATBAT.ATBAT_PROBS import ProbabilityModifier
+from UTILITIES.MATCHUP_CACHE import MatchupCache
+from UTILITIES.ENUMS import Outcome
+from UTILITIES.FILE_PATHS import MATCHUP_TABLE
+from typing import Optional
 
 
 class MatchupTokenGenerator:
     """
-    Generates MatchupToken objects for at-bat simulation.
-    Combines batter/pitcher data with game situation to create complete context.
+    Generates matchup probability tokens for at-bat simulation.
+    
+    Simply looks up precomputed probabilities and applies contextual modifiers
+    (park factors, etc.). No complex calculation - just lookup and modify.
     """
     
-    @staticmethod
-    def generate_token(batter, pitcher, league, gamestate):
+    # Class-level cache instance (loaded once)
+    _matchup_cache: Optional[MatchupCache] = None
+    
+    @classmethod
+    def initialize_cache(cls, cache_path: str = MATCHUP_TABLE):
         """
-        Generate a token with all probabilities calculated and adjusted.
+        Initialize the matchup cache. Call this once at game startup.
         
-        Pipeline: base odds ratio → split advantage → park factors → normalize
+        Args:
+            cache_path: Path to precomputed matchup table
         """
-        # Calculate BABIP (single value)
-        babip_prob = ProbabilityCalculator.calculate_base_probability(
-            batter.b_babip, pitcher.p_babip, league.babip_factor
-        )
+        if cls._matchup_cache is None:
+            cls._matchup_cache = MatchupCache(cache_path)
+            cls._matchup_cache.load()
+    
+    @classmethod
+    def generate_token(cls, gamestate, batter, pitcher):
+        """
+        Generate probability token from precomputed matchup table.
         
-        # Build base outcome probabilities (SO, BB, HP, HR)
-        base_probs = OutcomeBuilder.build_base_probabilities(
-            batter.bat_base_stats, pitcher.pit_base_stats, league.base_factors
-        )
+        Pipeline: lookup precomputed → apply park factors → return
         
-        # Build hit type distribution (SL, DL, TL, IH)
-        hits_probs = OutcomeBuilder.build_hits_distribution(
-            batter.bat_hit_stats, pitcher.pit_hit_stats, league.hit_factors
-        )
+        Returns: (base_probs, babip_prob, hits_keys, hits_vals, outs_keys, outs_vals)
+        """
+        # Initialize cache if not already done
+        if cls._matchup_cache is None:
+            cls.initialize_cache()
         
-        # Build out type distribution (GO, FO, LO, PO)
-        outs_probs = OutcomeBuilder.build_outs_distribution(
-            batter.b_gbfb, pitcher.p_gbfb, league.gbfb_factor
-        )
+        # Lookup precomputed matchup probabilities
+        assert cls._matchup_cache is not None
+        matchup_probs = cls._matchup_cache.get_matchup(batter.team_abbrev, batter.player_id, pitcher.team_abbrev, pitcher.player_id)
         
-        # Apply split advantage to base outcomes and hits
-        split_multiplier = ProbabilityCalculator.calculate_split_advantage(batter, pitcher)
-        base_probs = {k: v * split_multiplier for k, v in base_probs.items()}
-        hits_probs = {k: v * split_multiplier for k, v in hits_probs.items()}
+        if matchup_probs is None:
+            raise ValueError(
+                f"No precomputed matchup found for batter {batter.player_id} vs pitcher {pitcher.player_id}. "
+                f"Run PRECOMPUTE_MATCHUPS.py to generate the matchup table."
+            )
         
-        # Apply park factors (stadium-specific adjustments)
-        park_factors = gamestate.home_team.stadium.park_factors
-        base_probs = ProbabilityCalculator.apply_park_factors(base_probs, park_factors)
-        hits_probs = ProbabilityCalculator.apply_park_factors(hits_probs, park_factors)
+        # Extract all outcome probabilities
+        outcome_probs = {
+            outcome: matchup_probs[outcome]
+            for outcome in ['SO', 'BB', 'HP', 'HR', 'IH', 'SL', 'DL', 'TL', 'GO', 'FO', 'LO', 'PO']
+        }
         
-        # Normalize hit and out distributions (these are conditional probabilities)
-        hits_total = sum(hits_probs.values())
-        if hits_total > 0:
-            hits_probs = {k: v / hits_total for k, v in hits_probs.items()}
+        # Get BABIP from precomputed data
+        babip_prob = matchup_probs['BABIP_batter']
         
-        # Outs already normalized by OutcomeBuilder
+        # Apply park factors if present
+        park_factors = gamestate.home_team.park_factors
+        if park_factors:
+            outcome_probs = ProbabilityModifier.apply_park_factors(outcome_probs, park_factors)
         
-        return Token(
-            batter=batter,
-            pitcher=pitcher,
-            babip_prob=babip_prob,
-            base_probs=base_probs,
-            hits_probs=hits_probs,
-            outs_probs=outs_probs,
-            game_situation=gamestate.get_situation_dict(),
-            timestamp=datetime.now().isoformat()
-        )
+        return outcome_probs, babip_prob
     
 
     

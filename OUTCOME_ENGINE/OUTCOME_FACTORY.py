@@ -16,71 +16,51 @@ from OUTCOME_FILES.POPOUT import Popout
 class OutcomeFactory:
     """
     Stateless registry for all outcome executors.
-    Maps each outcome enum to its executor class.
+    Pre-instantiated executors for maximum performance.
     """
     
-    # Class-level registry mapping outcomes to their executor classes (not instances)
-    _EXECUTORS = {
-        # Three True Outcomes
-        Outcome.SO: Strikeout,
-        Outcome.BB: BaseOnBalls,
-        Outcome.HP: HitByPitch,
-        
-        # Hits
-        Outcome.IH: InfieldHit,
-        Outcome.SL: Single,
-        Outcome.DL: Double,
-        Outcome.TL: Triple,
-        Outcome.HR: Homerun,
-        
-        # Outs
-        Outcome.GO: Groundout,
-        Outcome.FO: Flyout,
-        Outcome.LO: Lineout,
-        Outcome.PO: Popout,
-    }
+    # Pre-instantiated executor instances (created once at module load)
+    _SO = Strikeout()
+    _BB = BaseOnBalls()
+    _HP = HitByPitch()
+    _IH = InfieldHit()
+    _SL = Single()
+    _DL = Double()
+    _TL = Triple()
+    _HR = Homerun()
+    _GO = Groundout()
+    _FO = Flyout()
+    _LO = Lineout()
+    _PO = Popout()
     
     @staticmethod
-    def get_executor(outcome):
-        """
-        Get the executor class for a specific outcome.
+    def execute_outcome(outcome, gamestate, batter, pitcher):
+        """ Execute an outcome using its registered executor. """       
         
-        Args:
-            outcome: Outcome enum value
-            
-        Returns:
-            Executor class for this outcome
-            
-        Raises:
-            KeyError: If no executor exists for the outcome
-        """
-        if outcome not in OutcomeFactory._EXECUTORS:
+        # Direct dispatch - faster than dictionary lookup
+        if outcome == Outcome.SO:
+            return OutcomeFactory._SO.execute(gamestate, batter, pitcher)
+        elif outcome == Outcome.BB:
+            return OutcomeFactory._BB.execute(gamestate, batter, pitcher)
+        elif outcome == Outcome.HP:
+            return OutcomeFactory._HP.execute(gamestate, batter, pitcher)
+        elif outcome == Outcome.HR:
+            return OutcomeFactory._HR.execute(gamestate, batter, pitcher)
+        elif outcome == Outcome.IH:
+            return OutcomeFactory._IH.execute(gamestate, batter, pitcher)
+        elif outcome == Outcome.SL:
+            return OutcomeFactory._SL.execute(gamestate, batter, pitcher)
+        elif outcome == Outcome.DL:
+            return OutcomeFactory._DL.execute(gamestate, batter, pitcher)
+        elif outcome == Outcome.TL:
+            return OutcomeFactory._TL.execute(gamestate, batter, pitcher)
+        elif outcome == Outcome.GO:
+            return OutcomeFactory._GO.execute(gamestate, batter, pitcher)
+        elif outcome == Outcome.FO:
+            return OutcomeFactory._FO.execute(gamestate, batter, pitcher)
+        elif outcome == Outcome.LO:
+            return OutcomeFactory._LO.execute(gamestate, batter, pitcher)
+        elif outcome == Outcome.PO:
+            return OutcomeFactory._PO.execute(gamestate, batter, pitcher)
+        else:
             raise KeyError(f"No executor registered for outcome: {outcome}")
-        
-        executor_class = OutcomeFactory._EXECUTORS[outcome]
-        if executor_class is None:
-            raise NotImplementedError(f"Executor for {outcome} not yet implemented")
-        
-        return executor_class
-    
-    @staticmethod
-    def execute_outcome(outcome, gamestate, batter, pitcher, matchup_token, hit_info=None, is_error=False):
-        """
-        Execute an outcome using its registered executor.
-        
-        Args:
-            outcome: Outcome enum value
-            gamestate: Current game state object
-            batter: Batter player object
-            pitcher: Pitcher player object
-            matchup_token: MatchupToken with context
-            base_runner_mgr: BaseRunnerManager for advancing runners
-            hit_info: Optional hit location/info (for balls in play)
-            is_error: Whether a fielding error occurred on the play
-            
-        Returns:
-            PlayContext from the executor's execute method
-        """
-        executor_class = OutcomeFactory.get_executor(outcome)
-        # Instantiate handler and execute (handlers can be stateless or stateful)
-        return executor_class().execute(gamestate, batter, pitcher, matchup_token, hit_info, is_error)
