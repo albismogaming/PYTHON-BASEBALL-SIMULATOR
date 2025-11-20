@@ -1,89 +1,103 @@
-import numpy as np
-from UTILITIES.SETTINGS import *
+from typing import Dict
 
 
-class ProbabilityCalculator:
+class ProbabilityModifier:
     """
-    Static utility methods for probability calculations.
-    No instance needed - all methods are stateless.
+    Applies situational modifiers to precomputed base matchup probabilities.
+    
+    Base matchup probabilities come from the precomputed table (batter vs pitcher).
+    This class applies contextual adjustments like park factors, game situation, etc.
     """
     
     @staticmethod
-    def calculate_base_probability(batter_prob, pitcher_prob, league_prob):
-        """
-        Calculate combined probability using odds ratio method.
+    def apply_park_factors(probabilities: Dict[str, float], park_factors: Dict[str, float]) -> Dict[str, float]:
+        """ Apply park factors to base probabilities. """
         
-        Method: Calculate how much each player deviates from league average,
-        then apply both deviations to the league baseline.
+        adjusted = {}
+        for outcome, prob in probabilities.items():
+            # Apply park factor if it exists for this outcome
+            if outcome in park_factors:
+                adjusted[outcome] = prob * park_factors[outcome]
+            else:
+                adjusted[outcome] = prob
         
-        This ensures:
-        - League avg batter vs league avg pitcher = league avg result
-        - Extreme values are properly bounded
-        - Effects are multiplicative (as they are in real baseball)
-        """
-        # Avoid division by zero and extreme values
-        epsilon = 0.0001
-        batter_prob = np.clip(batter_prob, epsilon, 1 - epsilon)
-        pitcher_prob = np.clip(pitcher_prob, epsilon, 1 - epsilon)
-        league_prob = np.clip(league_prob, epsilon, 1 - epsilon)
-        
-        # Convert to odds: odds = prob / (1 - prob)
-        batter_odds = batter_prob / (1 - batter_prob)
-        pitcher_odds = pitcher_prob / (1 - pitcher_prob)
-        league_odds = league_prob / (1 - league_prob)
-        
-        # Calculate odds ratios: how much better/worse than league
-        # batter_ratio > 1 means better than average
-        # pitcher_ratio > 1 means pitcher allows more (worse for pitcher)
-        batter_ratio = batter_odds / league_odds
-        pitcher_ratio = pitcher_odds / league_odds
-        
-        # Combine effects: start with league baseline, apply both player effects
-        # This is the standard sabermetric approach
-        combined_odds = league_odds * batter_ratio * pitcher_ratio
-        
-        # Convert odds back to probability: prob = odds / (1 + odds)
-        probability = combined_odds / (1 + combined_odds)
-        
-        return np.clip(probability, 0, 1) # Ensure valid probability range
-
+        return adjusted
+    
     @staticmethod
-    def calculate_split_advantage(batter, pitcher) -> float:
-        """
-        Calculate platoon advantage multiplier.
-        
-        Returns:
-            float: Multiplier to apply to probabilities (1.0 = neutral)
-                >1.0 = favorable matchup
-                <1.0 = unfavorable matchup
-        """
-        # Switch hitters ALWAYS have favorable matchup
-        if batter.bats == 'B':
-            return 1.0 + np.random.uniform(0.01, 0.10)  # e.g., +5% to +10%
-        
-        # Regular batters: check if favorable
-        favorable = (
-            (batter.bats == 'L' and pitcher.throws == 'R') or
-            (batter.bats == 'R' and pitcher.throws == 'L')
-        )
-        
-        if favorable:
-            return 1.0 + np.random.uniform(0.01, 0.10)  # e.g., +5% to +10%
-        else:
-            return 1.0 - np.random.uniform(0.01, 0.10)  # e.g., -5% to -10%
+    def apply_league_factors(probabilities: Dict[str, float], league_averages: Dict[str, float]) -> Dict[str, float]:
+        """ Regress probabilities toward league average. """
 
+        adjusted = {}
+        for outcome, prob in probabilities.items():
+            if outcome in league_averages:
+                adjusted[outcome] = prob * league_averages[outcome]
+            else:
+                adjusted[outcome] = prob
+
+        return adjusted
+    
     @staticmethod
-    def apply_park_factors(probabilities, park_factors):
+    def apply_situational_modifiers(probabilities: Dict[str, float], modifiers: Dict[str, float]) -> Dict[str, float]:
+        """ Apply situational modifiers to probabilities. """
+
+        adjusted = {}
+        for outcome, prob in probabilities.items():
+            multiplier = modifiers.get(outcome, 1.0)
+            adjusted[outcome] = prob * multiplier
+        
+        return adjusted
+    
+    @staticmethod
+    def apply_all_modifiers(base_probs: Dict[str, float], 
+                            league_averages: Dict[str, float] | None = None, 
+                            park_factors: Dict[str, float] | None = None,
+                            situational_modifiers: Dict[str, float] | None = None) -> Dict[str, float]:
         """
-        Apply park factors to probabilities.
+        Apply all modifiers to base probabilities in sequence.
+        
+        Recommended pipeline:
+        1. League regression (normalize to context)
+        2. Park factors (stadium effects)
+        3. Situational modifiers (clutch, fatigue, etc.)
         
         Args:
-            probabilities: Dict of outcome probabilities
-            park_factors: Dict of park factor multipliers per outcome
+            base_probabilities: Base matchup probabilities from precomputed table
+            league_averages: Optional league average rates for regression
+            park_factors: Optional park factor adjustments
+            situational_modifiers: Optional situational adjustments
+            regression_weight: How much to regress toward league mean (default 0.1)
             
         Returns:
-            dict: Adjusted probabilities
+            dict: Fully adjusted probabilities
         """
-        return {outcome: prob * park_factors.get(outcome, 1.0) 
-                for outcome, prob in probabilities.items()}
-
+        probs = base_probs.copy()
+        
+        # Apply league regression if provided
+        if league_averages:
+            probs = ProbabilityModifier.apply_league_factors(probs, league_averages)
+        
+        # Apply park factors if provided
+        if park_factors:
+            probs = ProbabilityModifier.apply_park_factors(probs, park_factors)
+        
+        # Apply situational modifiers if provided
+        if situational_modifiers:
+            probs = ProbabilityModifier.apply_situational_modifiers(probs, situational_modifiers)
+        
+        # Ensure all probabilities are within valid range [0, 1]
+        probs = {outcome: max(0.0, min(1.0, prob)) 
+                for outcome, prob in probs.items()}
+        
+        return probs
+    
+    @staticmethod
+    def normalize_probabilities(probabilities: Dict[str, float]) -> Dict[str, float]:
+        """ Normalize a set of probabilities to sum to 1.0. """
+        total = sum(probabilities.values())
+        
+        if total == 0:
+            # Avoid division by zero - return uniform distribution
+            num_outcomes = len(probabilities)
+            return {outcome: 1.0 / num_outcomes for outcome in probabilities}
+        
+        return {outcome: prob / total for outcome, prob in probabilities.items()}
