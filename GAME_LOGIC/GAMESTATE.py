@@ -1,4 +1,3 @@
-from UTILITIES.SETTINGS import *
 from UTILITIES.FILE_PATHS import *
 from UTILITIES.ENUMS import *
 
@@ -19,6 +18,7 @@ class GameState:
 
         self.hits_hit = 0
         self.runs_scored = 0
+        self.errors_made = 0
         self.pickoffs = 0
         self.is_walk_off = False
         self.is_inning_over = False
@@ -35,97 +35,26 @@ class GameState:
         return 'away_team' if self.inninghalf == InningHalf.TOP else 'home_team'
     
     # ============================================================
-    # OUTS UPDATE METHODS
-    # ============================================================
-    
-    def add_out(self, num_outs=1):
-        """
-        Add out(s) to the current count.
-        
-        Args:
-            num_outs: Number of outs to add (default 1)
-        """
-        self.outs += num_outs
-        if self.outs > 3:
-            self.outs = 3
-    
-    def reset_outs(self):
-        """Reset outs to 0 (used when inning changes)."""
-        self.outs = 0
-    
-    # ============================================================
     # SCORE UPDATE METHODS
     # ============================================================
     
-    def add_run(self, runs=1, team=None):
+    def add_stats(self, hits=0, runs=0, outs=0):
         """
-        Add run(s) to a team's score.
+        Add hits, runs, and outs in a single call (performance optimization).
         
         Args:
-            runs: Number of runs to add (default 1)
-            team: Team key ('away_team' or 'home_team'). If None, uses current batting team
+            hits: Number of hits to add
+            runs: Number of runs to add
+            outs: Number of outs to add
         """
-        if team is None:
-            team = self.current_team
-        
-        self.stats[team]['score'] += runs
-        
-        # Update score_by_inning
-        while len(self.stats[team]['score_by_inning']) < self.current_inning:
-            self.stats[team]['score_by_inning'].append(0)
-        
-        self.stats[team]['score_by_inning'][self.current_inning - 1] += runs
-        
-        # Track runs scored this play
-        self.runs_scored += runs
-    
-    def add_run_with_walkoff_check(self, runs=1):
-        """
-        Add run(s) with walk-off scenario handling.
-        Limits runs to only what's needed to win if it's a walk-off situation.
-        
-        Args:
-            runs: Number of runs that would score
-        """
-        team = self.current_team
-        
-        # Check if walk-off scenario
-        if (self.inninghalf == InningHalf.BOT and 
-            self.current_inning >= INNINGS and 
-            self.stats["home_team"]["score"] <= self.stats["away_team"]["score"]):
-            
-            # Calculate runs needed to win
-            runs_needed = (self.stats["away_team"]["score"] + 1) - self.stats["home_team"]["score"]
-            runs = min(runs, runs_needed)
-            
-            # Add the runs
-            self.add_run(runs, team)
-            
-            # Set walk-off
-            self.is_walk_off = True
-            self.is_inning_over = True
-            self.is_game_over = True
-        else:
-            # Normal run scoring
-            self.add_run(runs, team)
-    
-    # ============================================================
-    # HITS AND ERRORS UPDATE METHODS
-    # ============================================================
-    
-    def add_hit(self, num_hits=1, team=None):
-        """
-        Add hit(s) to a team's total.
-        
-        Args:
-            num_hits: Number of hits to add (default 1)
-            team: Team key. If None, uses current batting team
-        """
-        if team is None:
-            team = self.current_team
-        
-        self.stats[team]['hits'] += num_hits
-        self.hits_hit += num_hits
+        if hits:
+            self.stats[self.current_team]['hits'] += hits
+            self.hits_hit += hits
+        if runs:
+            self.stats[self.current_team]['score'] += runs
+            self.runs_scored += runs
+        if outs:
+            self.outs += outs
     
     def add_error(self, num_errors=1, team=None):
         """
@@ -189,32 +118,6 @@ class GameState:
         self.batting_team = self.away_team if self.inninghalf == InningHalf.TOP else self.home_team
         self.pitching_team = self.home_team if self.inninghalf == InningHalf.TOP else self.away_team
     
-    def should_end_game(self):
-        """
-        Check if the game should end due to walk-off or completed innings.
-        
-        Returns:
-            bool: True if game should end, False otherwise
-        """
-        # Walk-off scenario ends game immediately
-        if self.is_walk_off:
-            return True
-        
-        # Top of 9th or later: game ends if home team is ahead
-        if self.current_inning >= INNINGS and self.inninghalf == InningHalf.TOP:
-            if self.stats['home_team']['score'] > self.stats['away_team']['score']:
-                return True
-            return False
-        
-        # Bottom of 9th or later: game ends if away team is ahead
-        if self.current_inning >= INNINGS and self.inninghalf == InningHalf.BOT:
-            if self.stats['away_team']['score'] > self.stats['home_team']['score']:
-                return True
-        
-        return False
-
-
-
     # ============================================================
     # GAME CONTEXT METHODS
     # ============================================================
@@ -240,31 +143,30 @@ class GameState:
             'score_diff': abs(self.stats['away_team']['score'] - self.stats['home_team']['score'])
         }
     
-    def get_base_state(self) -> str:
+    def get_base_state(self) -> int:
         """
-        Get a string representation of the current base state.
+        Get bitwise representation of the current base state.
         
         Returns:
-            str: Base state code (e.g., "1_1_0" for runners on 1st and 2nd)
+            int: Bitwise base state where:
+                - Bit 0 (value 1): Runner on 1st
+                - Bit 1 (value 2): Runner on 2nd
+                - Bit 2 (value 4): Runner on 3rd
+                
+        Examples:
+            0 = empty bases
+            1 = runner on 1st only
+            3 = runners on 1st and 2nd
+            7 = bases loaded
         """
-        base_tuple = (
-            self.bases[Base.FST] is not None,
-            self.bases[Base.SND] is not None,
-            self.bases[Base.THD] is not None
-        )
-        
-        base_states = {
-            (True, True, True): "1_1_1",
-            (True, False, False): "1_0_0",
-            (False, True, False): "0_1_0",
-            (False, False, True): "0_0_1",
-            (True, True, False): "1_1_0",
-            (True, False, True): "1_0_1",
-            (False, True, True): "0_1_1",
-            (False, False, False): "0_0_0"
-        }
-        
-        return base_states.get(base_tuple, "0_0_0")
+        state = 0
+        if self.bases[Base.FST] is not None:
+            state |= 1  # Set bit 0
+        if self.bases[Base.SND] is not None:
+            state |= 2  # Set bit 1
+        if self.bases[Base.THD] is not None:
+            state |= 4  # Set bit 2
+        return state
     
     def get_fielder(self, hit_info):
         """
@@ -324,13 +226,13 @@ class GameState:
         
         # Top of 9th or later: if home team is ahead after top half, game can end
         # (skip bottom of inning)
-        if self.current_inning >= INNINGS and self.inninghalf == InningHalf.TOP:
+        if self.current_inning >= 9 and self.inninghalf == InningHalf.TOP:
             if self.outs >= 3 and self.stats['home_team']['score'] > self.stats['away_team']['score']:
                 self.is_game_over = True
                 return True
         
         # Bottom of 9th or later: if away team is ahead and bottom half ends, game over
-        if self.current_inning >= INNINGS and self.inninghalf == InningHalf.BOT:
+        if self.current_inning >= 9 and self.inninghalf == InningHalf.BOT:
             if self.outs >= 3 and self.stats['away_team']['score'] > self.stats['home_team']['score']:
                 self.is_game_over = True
                 return True
