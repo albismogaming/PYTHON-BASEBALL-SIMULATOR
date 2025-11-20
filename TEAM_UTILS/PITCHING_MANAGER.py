@@ -3,43 +3,15 @@ from typing import List, Optional, Dict
 from CONTEXT.PLAYER_CONTEXT import Player
 
 
-# Pitching threshold constants
-class PitchingThresholds:
-    """Constants for pitching change decisions"""
-    # Starting pitcher limits
-    STARTER_PITCHES_LIMIT = 95
-    STARTER_INNINGS_LIMIT = 6.0
-    STARTER_RUNS_LIMIT = 4
-    STARTER_HITS_LIMIT = 10
-    STARTER_STRUGGLE_LIMIT = 4.0
-    
-    # Extended starter limits (blowouts/low leverage)
-    EXTENDED_STARTER_PITCHES_LIMIT = 110
-    EXTENDED_STARTER_INNINGS_LIMIT = 7.0
-    EXTENDED_STARTER_RUNS_LIMIT = 6
-    
-    # Reliever limits
-    RELIEVER_PITCHES_LIMIT = 30
-    RELIEVER_INNINGS_LIMIT = 2.0
-    RELIEVER_RUNS_LIMIT = 3
-    RELIEVER_HITS_LIMIT = 4
-    
-    # Extended reliever limits (blowouts/low leverage)
-    EXTENDED_RELIEVER_PITCHES_LIMIT = 40
-    EXTENDED_RELIEVER_INNINGS_LIMIT = 3.0
-    EXTENDED_RELIEVER_RUNS_LIMIT = 4
+# Simple pitching limits
+STARTER_PITCH_LIMIT = 95
+STARTER_INNING_LIMIT = 6.0
+RELIEVER_PITCH_LIMIT = 30
+RELIEVER_INNING_LIMIT = 2.0
 
 
 class PitchingManager:
-    """
-    Manages pitching staff during a game.
-    
-    Responsibilities:
-    - Select starting pitcher
-    - Manage bullpen (relief pitchers)
-    - Track current pitcher and pitchers used
-    - Determine when to make pitching changes
-    """
+    """ Manages pitching staff during a game. """
     
     def __init__(self, pitchers: List[Player]):
         """
@@ -160,192 +132,57 @@ class PitchingManager:
         Returns:
             Dictionary of pitcher stats
         """
+        from TEAM_UTILS.STATS_MANAGER import StatsManager
+        stats = StatsManager.get_pitcher_stats(pitcher)
+        
+        if not stats:
+            return {
+                'outs_recorded': 0,
+                'innings_pitched': 0,
+                'pitches_thrown': 0,
+                'runs_allowed': 0,
+                'hits_allowed': 0,
+                'walks_issued': 0,
+                'strikeouts': 0
+            }
+        
         return {
-            'outs_recorded': pitcher.pit_stats.get('outs_recorded', 0),
-            'pitches_thrown': pitcher.pit_stats.get('pitches_thrown', 0),
-            'runs_allowed': pitcher.pit_stats.get('runs_allowed', 0),
-            'hits_allowed': pitcher.pit_stats.get('hits', 0),
-            'walks_issued': pitcher.pit_stats.get('walks', 0),
-            'strikeouts': pitcher.pit_stats.get('strikeouts', 0)
+            'outs_recorded': stats.get('Outs', 0),
+            'innings_pitched': stats.get('IP', 0.0),
+            'pitches_thrown': stats.get('PT', 0),
+            'runs_allowed': stats.get('R', 0),
+            'hits_allowed': stats.get('H', 0),
+            'walks_issued': stats.get('BB', 0),
+            'strikeouts': stats.get('SO', 0)
         }
     
-    def calculate_innings_pitched(self, outs_recorded: int) -> float:
+    def should_change_pitcher(self) -> bool:
         """
-        Calculate innings pitched from outs recorded.
+        Simple check: change pitcher if they've exceeded pitch count or innings limit.
         
-        Args:
-            outs_recorded: Total outs recorded
-            
         Returns:
-            Innings pitched as a float (e.g., 5.2 for 5 and 2/3 innings)
-        """
-        full_innings = outs_recorded // 3
-        additional_outs = outs_recorded % 3
-        return full_innings + (additional_outs / 3.0)
-    
-    def calculate_struggle_index(self, stats: Dict[str, int]) -> float:
-        """
-        Calculate a struggle index based on pitcher performance.
-        Higher values indicate more struggle.
-        
-        Args:
-            stats: Dictionary of pitcher stats
-            
-        Returns:
-            Struggle index value
-        """
-        runs_weight = 0.5
-        hits_weight = 0.2
-        walks_weight = 0.1
-        
-        return (runs_weight * stats['runs_allowed'] + 
-                hits_weight * stats['hits_allowed'] + 
-                walks_weight * stats['walks_issued'])
-    
-    def can_finish_inning(self, pitcher: Player, outs_in_inning: int, 
-                         pitch_threshold: float = 0.9) -> bool:
-        """
-        Determine if pitcher should be allowed to finish the current inning.
-        
-        Args:
-            pitcher: The current pitcher
-            outs_in_inning: Number of outs recorded in current inning (0-2)
-            pitch_threshold: Percentage of pitch limit (default 0.9 = 90%)
-            
-        Returns:
-            True if pitcher should finish the inning
-        """
-        if outs_in_inning == 2:  # Last out of inning
-            stats = self.get_pitcher_stats(pitcher)
-            
-            if pitcher.position == 'SP':
-                return stats['pitches_thrown'] < PitchingThresholds.STARTER_PITCHES_LIMIT * pitch_threshold
-            else:  # RP
-                return stats['pitches_thrown'] < PitchingThresholds.RELIEVER_PITCHES_LIMIT * pitch_threshold
-        
-        return False
-    
-    def _check_thresholds(self, stats: Dict[str, int], innings_pitched: float, 
-                         position: str, is_extended: bool, high_leverage: bool) -> bool:
-        """
-        Helper method to check if pitcher has exceeded thresholds.
-        
-        Args:
-            stats: Pitcher statistics
-            innings_pitched: Innings pitched so far
-            position: 'SP' or 'RP'
-            is_extended: Whether to use extended thresholds (blowout/trailing)
-            high_leverage: Whether this is a high-leverage situation
-            
-        Returns:
-            True if thresholds are exceeded and change is needed
-        """
-        if position == 'SP':
-            if is_extended:
-                # Extended starter limits
-                if (stats['pitches_thrown'] >= PitchingThresholds.EXTENDED_STARTER_PITCHES_LIMIT or
-                    innings_pitched >= PitchingThresholds.EXTENDED_STARTER_INNINGS_LIMIT or
-                    stats['runs_allowed'] >= PitchingThresholds.EXTENDED_STARTER_RUNS_LIMIT):
-                    return True
-            else:
-                # Normal starter limits
-                if (stats['pitches_thrown'] >= PitchingThresholds.STARTER_PITCHES_LIMIT or
-                    innings_pitched >= PitchingThresholds.STARTER_INNINGS_LIMIT or
-                    stats['runs_allowed'] >= PitchingThresholds.STARTER_RUNS_LIMIT or
-                    stats['hits_allowed'] >= PitchingThresholds.STARTER_HITS_LIMIT or
-                    self.calculate_struggle_index(stats) >= PitchingThresholds.STARTER_STRUGGLE_LIMIT):
-                    return True
-                
-                # High-leverage adjustments (tighter leash)
-                if high_leverage:
-                    if (stats['pitches_thrown'] >= PitchingThresholds.STARTER_PITCHES_LIMIT * 0.8 or
-                        stats['runs_allowed'] >= PitchingThresholds.STARTER_RUNS_LIMIT * 0.75):
-                        return True
-        
-        elif position == 'RP':
-            if is_extended:
-                # Extended reliever limits
-                if (stats['pitches_thrown'] >= PitchingThresholds.EXTENDED_RELIEVER_PITCHES_LIMIT or
-                    innings_pitched >= PitchingThresholds.EXTENDED_RELIEVER_INNINGS_LIMIT or
-                    stats['runs_allowed'] >= PitchingThresholds.EXTENDED_RELIEVER_RUNS_LIMIT):
-                    return True
-            else:
-                # Normal reliever limits
-                if (stats['pitches_thrown'] >= PitchingThresholds.RELIEVER_PITCHES_LIMIT or
-                    innings_pitched >= PitchingThresholds.RELIEVER_INNINGS_LIMIT or
-                    stats['runs_allowed'] >= PitchingThresholds.RELIEVER_RUNS_LIMIT or
-                    stats['hits_allowed'] >= PitchingThresholds.RELIEVER_HITS_LIMIT):
-                    return True
-                
-                # High-leverage adjustments (tighter leash)
-                if high_leverage:
-                    if (stats['pitches_thrown'] >= PitchingThresholds.RELIEVER_PITCHES_LIMIT * 0.8 or
-                        stats['runs_allowed'] >= PitchingThresholds.RELIEVER_RUNS_LIMIT * 0.66):
-                        return True
-        
-        return False
-    
-    def should_change_pitcher(self, 
-                            current_inning: int,
-                            current_outs: int,
-                            score_differential: int = 0,
-                            team_is_leading: bool = False) -> bool:
-        """
-        Comprehensive method to determine if a pitching change should be made.
-        
-        Args:
-            current_inning: Current inning number (1-9+)
-            current_outs: Total outs in the game (0-53+)
-            score_differential: Absolute difference in score
-            team_is_leading: Whether this team is currently leading
-            
-        Returns:
-            True if pitching change is recommended
+            True if pitching change is needed
         """
         if not self.current_pitcher:
             return False
         
-        pitcher = self.current_pitcher
-        stats = self.get_pitcher_stats(pitcher)
-        innings_pitched = self.calculate_innings_pitched(stats['outs_recorded'])
-        
-        # Calculate outs in current inning
-        outs_in_inning = current_outs % 3
-        
-        # Check if at last out of inning - allow finishing if close to limit
-        if outs_in_inning == 2 and self.can_finish_inning(pitcher, outs_in_inning):
+        # Check if any relievers available
+        if not self.has_available_relievers():
             return False
         
-        # Determine game situation
-        blowout = (score_differential >= 6 if current_inning >= 7 else score_differential >= 8)
-        high_leverage = (current_inning >= 8 and score_differential <= 3)
-        team_trailing = not team_is_leading and score_differential > 0
+        pitcher = self.current_pitcher
+        stats = self.get_pitcher_stats(pitcher)
         
-        # Use extended limits in blowouts or when trailing badly
-        is_extended = blowout or (team_trailing and score_differential > 5)
-        
-        # Check thresholds using helper method
-        return self._check_thresholds(stats, innings_pitched, pitcher.position, 
-                                     is_extended, high_leverage)
+        # Check limits based on position
+        if pitcher.position == 'SP':
+            return (stats['pitches_thrown'] >= STARTER_PITCH_LIMIT or 
+                    stats['innings_pitched'] >= STARTER_INNING_LIMIT)
+        else:  # RP
+            return (stats['pitches_thrown'] >= RELIEVER_PITCH_LIMIT or 
+                    stats['innings_pitched'] >= RELIEVER_INNING_LIMIT)
     
     def reset_for_new_game(self):
         """Reset pitching manager for a new game."""
         self.current_pitcher = None
         self.starting_pitcher = None
         self.pitchers_used = []
-    
-    def get_pitching_staff_string(self) -> str:
-        """Get formatted string of pitching staff."""
-        lines = []
-        
-        lines.append("STARTING PITCHERS:")
-        for pitcher in self.starting_pitchers:
-            used = "✓" if pitcher in self.pitchers_used else " "
-            lines.append(f"  [{used}] {pitcher.full_name} - AVG: {pitcher.average:.3f}")
-        
-        lines.append("\nRELIEF PITCHERS:")
-        for pitcher in self.relief_pitchers:
-            used = "✓" if pitcher in self.pitchers_used else " "
-            lines.append(f"  [{used}] {pitcher.full_name} - AVG: {pitcher.average:.3f}")
-        
-        return "\n".join(lines)

@@ -3,15 +3,7 @@ from CONTEXT.PLAYER_CONTEXT import Player
 from CONTEXT.TEAM_CONTEXT import Team
 
 class TeamManager:
-    """
-    Manages game-time behavior for a team.
-    
-    Responsibilities:
-    - Track current batter in lineup
-    - Rotate batting order
-    - Manage pitching changes
-    - Track current pitcher
-    """
+    """ Manages game-time behavior for a team. """
     
     def __init__(self, team: Team):
         self.team = team
