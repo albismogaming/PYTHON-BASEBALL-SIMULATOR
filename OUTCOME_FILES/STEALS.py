@@ -1,41 +1,29 @@
 from UTILITIES.ENUMS import *
-from CONTEXT.PLAY_CONTEXT import PlayContext
-import random
+import random as r
 
 class BaseStealing:
-    def execute(self, gamestate, batter, pitcher, matchup_token, base_runner_mgr, hit_info, is_error=False):
-        play_context = PlayContext(
-            batter=batter,
-            pitcher=pitcher,
-            description="STEAL SECOND ATTEMPT",
-            token=matchup_token,
-            hit_info=hit_info,
-            hits_hit=0,
-            is_ball_in_play=False,
-            is_complete=True,
-            at_bat_complete=False,
-            is_error=is_error
-        )
+    def execute(self, gamestate, batter, pitcher):
+        hits = 0
+        runs = 0
+        outs = 0
 
-        if gamestate.bases[Base.THD] != None:
-            play_context.on_thd = base_runner_mgr.hld_runner(Base.THD)
+        r1 = gamestate.bases[Base.FST] is not None
+        r2 = gamestate.bases[Base.SND] is not None
+        r3 = gamestate.bases[Base.THD] is not None
 
-        if gamestate.bases[Base.SND] != None:
-            play_context.on_snd = base_runner_mgr.hld_runner(Base.SND)
+        # Only attempt steal if R1 occupied and R2 empty (no double steal logic yet)
+        if r1 and not r2:
+            randval = r.randint(1, 1000)
+            
+            if randval <= 210:  # 21% - Caught stealing
+                gamestate.bases[Base.FST] = None
+                outs += 1
+            
+            elif randval <= 240:  # 3% - Delayed/held at first (pickoff attempt, etc)
+                pass  # Runner stays at first, no state change needed
+            
+            else:  # 76% - Successful steal
+                gamestate.bases[Base.SND] = gamestate.bases[Base.FST]
+                gamestate.bases[Base.FST] = None
 
-        if gamestate.bases[Base.FST] != None:
-            if gamestate.bases[Base.SND] != None:
-                randval = random.randint(1, 1000)
-                if randval <= 210:
-                    play_context.on_fst = base_runner_mgr.out_runner(Base.FST, Base.SND)
-                    play_context.outs_recorded += 1
-                
-                elif randval <= 240:
-                    play_context.on_fst = base_runner_mgr.hld_runner(Base.FST)
-
-                else:
-                    play_context.on_fst = base_runner_mgr.adv_runner(Base.FST, Base.SND)
-            else:
-                    play_context.on_fst = base_runner_mgr.hld_runner(Base.FST)
-
-        return play_context
+        gamestate.add_stats(hits=hits, runs=runs, outs=outs)

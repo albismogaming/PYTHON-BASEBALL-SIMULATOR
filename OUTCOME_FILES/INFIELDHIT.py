@@ -1,46 +1,33 @@
 from UTILITIES.ENUMS import *
-from CONTEXT.PLAY_CONTEXT import PlayContext
-from ENGINES.ENG_BASERUNNING import BaseRunnerEngine as BRE
-import random
 
 class InfieldHit:
-    def execute(self, gamestate, batter, pitcher, matchup_token, hit_info, is_error=False):
-        play_context = PlayContext(
-            batter=batter,
-            pitcher=pitcher,
-            description="INFIELD HIT",
-            token=matchup_token,
-            hit_info=hit_info,
-            hits_hit=1,
-            is_ball_in_play=True,
-            is_complete=True,
-            at_bat_complete=True,
-            is_error=is_error
-        )
+    def execute(self, gamestate, batter, pitcher):
+        hits = 1
+        runs = 0
+        outs = 0
 
-        # Parse base state
-        base_state = gamestate.get_base_state()
-        r1 = base_state[0] == "1"
-        r2 = base_state[2] == "1"
-        r3 = base_state[4] == "1"
+        r1 = gamestate.bases[Base.FST] is not None
+        r2 = gamestate.bases[Base.SND] is not None
+        r3 = gamestate.bases[Base.THD] is not None
 
         if r3:
-            play_context.on_thd = BRE.scr_runner(gamestate, Base.THD)
-            play_context.runs_scored += 1
-
+            gamestate.bases[Base.THD] = None
+            runs += 1
+        
         if r2:
-            play_context.on_snd = BRE.adv_runner(gamestate, Base.SND, Base.THD)
+            gamestate.bases[Base.THD] = gamestate.bases[Base.SND]
+            gamestate.bases[Base.SND] = None
 
         if r1:
-            play_context.on_fst = BRE.adv_runner(gamestate, Base.FST, Base.SND)
+            gamestate.bases[Base.SND] = gamestate.bases[Base.FST]
+            gamestate.bases[Base.FST] = None   
 
-        # Batter always advances to 1st on a walk
-        play_context.on_bat = BRE.adv_batter(gamestate, Base.FST, batter)
-
-        # Update game state
-        gamestate.add_hit(play_context.hits_hit)
-        gamestate.add_run(play_context.runs_scored)
-        gamestate.add_out(play_context.outs_recorded)
-
-        return play_context
-
+        # Always advance batter to 1st
+        gamestate.bases[Base.FST] = batter
+        
+        return {
+            'hits': hits,
+            'runs': runs,
+            'outs': outs,
+            'rbis': runs,
+        }

@@ -1,45 +1,46 @@
 from UTILITIES.ENUMS import *
-from CONTEXT.PLAY_CONTEXT import PlayContext
-from ENGINES.ENG_BASERUNNING import BaseRunnerEngine as BRE
-import random
+from UTILITIES.RANDOM import get_random
 
 class Lineout:
-    def execute(self, gamestate, batter, pitcher, matchup_token, hit_info, is_error=False):
-        play_context = PlayContext(
-            batter=batter,
-            pitcher=pitcher,
-            description="LINEOUT",
-            token=matchup_token,
-            hit_info=hit_info,
-            hits_hit=0,
-            is_ball_in_play=True,
-            is_complete=True,
-            at_bat_complete=True,
-            is_error=is_error
-        )
+    def execute(self, gamestate, batter, pitcher):
+        hits = 0
+        runs = 0
+        outs = 1
 
-        # Parse base state
-        base_state = gamestate.get_base_state()
-        r1 = base_state[0] == "1"
-        r2 = base_state[2] == "1"
-        r3 = base_state[4] == "1"
+        r1 = gamestate.bases[Base.FST] is not None
+        r2 = gamestate.bases[Base.SND] is not None
+        r3 = gamestate.bases[Base.THD] is not None
 
         if r3:
-            play_context.on_thd = BRE.scr_runner(gamestate, Base.THD)
-            play_context.runs_scored += 1
-        
-        if r2:
-            play_context.on_snd = BRE.hld_runner(gamestate, Base.SND)
+            if gamestate.outs < 2:
+                adv = get_random()
 
-        if r1:
-            play_context.on_fst = BRE.hld_runner(gamestate, Base.FST)
-        
-        play_context.on_bat = BRE.out_batter(gamestate, Base.HME, batter)
-        play_context.outs_recorded += 1
+                if adv <= 0.078:
+                    # 7.8% - R3 tags and scores without throw
+                    gamestate.bases[Base.THD] = None
+                    runs += 1
 
-        # Update game state
-        gamestate.add_hit(play_context.hits_hit)
-        gamestate.add_run(play_context.runs_scored)
-        gamestate.add_out(play_context.outs_recorded)
+                elif adv <= 0.386:  # 0.078 + 0.308 = cumulative
+                    # 30.8% - R3 attempts to tag
+                    out = get_random()
+
+                    if out <= 0.084:
+                        # 8.4% thrown out at home
+                        gamestate.bases[Base.THD] = None
+                        outs += 1
+                    else:
+                        # 91.6% safe at home
+                        gamestate.bases[Base.THD] = None
+                        runs += 1
+                # else: 61.4% - R3 holds
+            
+            else:
+                # 2 outs - runner clears base without scoring (out ends inning)
+                gamestate.bases[Base.THD] = None
         
-        return play_context
+        return {
+            'hits': hits,
+            'runs': runs,
+            'outs': outs,
+            'rbis': runs,
+        }
