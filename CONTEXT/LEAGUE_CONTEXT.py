@@ -4,10 +4,7 @@ from dataclasses import dataclass
 class LeagueData:
     """
     League-average rates for all major outcomes.
-    Used as baseline probabilities in odds ratio calculations.
+    Used as optional regression/normalization in probability modifiers.
     """
     year: int
-    babip_factor: float
-    base_factors: dict[str, float]
-    hit_factors: dict[str, float]
-    gbfb_factor: float
+    factors: dict[str, float]  # All outcome rates: SO, BB, HP, HR, IH, SL, DL, TL, BABIP, GBFB

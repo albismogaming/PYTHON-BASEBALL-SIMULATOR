@@ -15,24 +15,12 @@ class Player:
     last_name: str
     age: int
     position: str
-    
-    # Handedness
     bats: str  # L, R, or B (both/switch)
     throws: str  # L or R
     
-    # Batter stats (raw rates for OutcomeBuilder)
-    bat_base_stats: Dict[str, float]  # SO, BB, HP, HR rates
-    bat_hit_stats: Dict[str, float]  # SL, DL, TL, IH rates
-    
-    # Pitcher stats (raw rates for OutcomeBuilder)
-    pit_base_stats: Dict[str, float]  # SO, BB, HP, HR rates
-    pit_hit_stats: Dict[str, float]  # SL, DL, TL, IH rates
-
-    # Contact quality
-    b_babip: float
-    p_babip: float
-    b_gbfb: float  # Ground ball to fly ball ratio
-    p_gbfb: float  # Ground ball to fly ball ratio
+    # Raw stats (only used for precomputation, not during simulation)
+    bat_stats_raw: Dict[str, float]  # SO, BB, HP, HR, IH, SL, DL, TL, BABIP, GBFB
+    pit_stats_raw: Dict[str, float]  # SO, BB, HP, HR, IH, SL, DL, TL, BABIP, GBFB
     
     # Additional attributes
     bat_profile: Optional[int] = None  # Batter profile for hit type distribution
@@ -70,39 +58,36 @@ class Player:
         Returns:
             Player instance
         """
-        # Extract base outcome rates (for OutcomeBuilder)
-        bat_base_stats = {
+        # Extract all batter stats into flat dict
+        bat_stats_raw = {
             'SO': row['b_SO'],
             'BB': row['b_BB'],
             'HP': row['b_HP'],
-            'HR': row['b_HR']
-        }
-        
-        # Extract hit type rates (for OutcomeBuilder)
-        bat_hit_stats = {
+            'HR': row['b_HR'],
             'IH': row['b_IH'],
             'SL': row['b_SL'],
             'DL': row['b_DL'],
             'TL': row['b_TL'],
+            'BABIP': row['b_BABIP'],
+            'GBFB': row['b_GBFB']
         }
         
-        pit_base_stats = {
-            'SO': row['b_SO'],
-            'BB': row['b_BB'],
-            'HP': row['b_HP'],
-            'HR': row['b_HR']
-        }
-        
-        # Extract hit type rates (for OutcomeBuilder)
-        pit_hit_stats = {
-            'IH': row['b_IH'],
-            'SL': row['b_SL'],
-            'DL': row['b_DL'],
-            'TL': row['b_TL'],
+        # Extract all pitcher stats into flat dict
+        pit_stats_raw = {
+            'SO': row['p_SO'],
+            'BB': row['p_BB'],
+            'HP': row['p_HP'],
+            'HR': row['p_HR'],
+            'IH': row['p_IH'],
+            'SL': row['p_SL'],
+            'DL': row['p_DL'],
+            'TL': row['p_TL'],
+            'BABIP': row['p_BABIP'],
+            'GBFB': row['p_GBFB']
         }
         
         return Player(
-            player_id=row['id'],
+            player_id=row['player_id'],
             team_abbrev=team_abbrev,
             first_name=row['FIRST'],
             last_name=row['LAST'],
@@ -110,14 +95,8 @@ class Player:
             position=row['POS'],
             bats=row['B'],
             throws=row['T'],
-            bat_base_stats=bat_base_stats,
-            bat_hit_stats=bat_hit_stats,
-            pit_base_stats=pit_base_stats,
-            pit_hit_stats=pit_hit_stats,
-            b_babip=row['b_BABIP'],
-            b_gbfb=row['b_GBFB'],
-            p_babip=row['p_BABIP'],
-            p_gbfb=row['p_GBFB'],
+            bat_stats_raw=bat_stats_raw,
+            pit_stats_raw=pit_stats_raw,
             bat_profile=row['BAT_PROFILE'],
             average=row['AVG'],
             clutch=row['CLU'],

@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List
-from CONTEXT.STADIUM_CONTEXT import Stadium
+from typing import List, Dict
 from CONTEXT.PLAYER_CONTEXT import Player
 
 @dataclass
@@ -14,8 +13,9 @@ class Team:
     abbreviation: str
     market: str  # City/region (e.g., "Los Angeles", "New York")
     
-    # Stadium
-    stadium: Stadium
+    # Stadium / Park Factors
+    stadium_name: str
+    park_factors: Dict[str, float]  # Park factor multipliers (e.g., {'HR': 1.2, 'SL': 0.95})
     
     # Roster
     batters: List[Player] = field(default_factory=list)
