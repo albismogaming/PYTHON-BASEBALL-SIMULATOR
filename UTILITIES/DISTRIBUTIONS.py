@@ -19,7 +19,6 @@ def normal(mean: float = 0.0, std_dev: float = 1.0, size: Optional[int] = None) 
     """
     return np.random.normal(mean, std_dev, size)
 
-
 def lognormal(mean: float = 0.0, sigma: float = 1.0, size: Optional[int] = None) -> Union[float, np.ndarray]:
     """
     Log-normal distribution (right-skewed)
@@ -36,7 +35,6 @@ def lognormal(mean: float = 0.0, sigma: float = 1.0, size: Optional[int] = None)
     """
     return np.random.lognormal(mean, sigma, size)
 
-
 def exponential(scale: float = 1.0, size: Optional[int] = None) -> Union[float, np.ndarray]:
     """
     Exponential distribution
@@ -51,7 +49,6 @@ def exponential(scale: float = 1.0, size: Optional[int] = None) -> Union[float, 
     Use case: Time between events, injury recovery time
     """
     return np.random.exponential(scale, size)
-
 
 def gamma(shape: float, scale: float = 1.0, size: Optional[int] = None) -> Union[float, np.ndarray]:
     """
@@ -69,7 +66,6 @@ def gamma(shape: float, scale: float = 1.0, size: Optional[int] = None) -> Union
     """
     return np.random.gamma(shape, scale, size)
 
-
 def beta(alpha: float, beta_param: float, size: Optional[int] = None) -> Union[float, np.ndarray]:
     """
     Beta distribution (bounded between 0 and 1)
@@ -86,7 +82,6 @@ def beta(alpha: float, beta_param: float, size: Optional[int] = None) -> Union[f
     """
     return np.random.beta(alpha, beta_param, size)
 
-
 def pareto(shape: float, size: Optional[int] = None) -> Union[float, np.ndarray]:
     """
     Pareto distribution (power law)
@@ -101,7 +96,6 @@ def pareto(shape: float, size: Optional[int] = None) -> Union[float, np.ndarray]
     Use case: Extreme events, "heavy tail" outcomes (rare huge plays)
     """
     return np.random.pareto(shape, size)
-
 
 def weibull(shape: float, size: Optional[int] = None) -> Union[float, np.ndarray]:
     """
@@ -118,7 +112,6 @@ def weibull(shape: float, size: Optional[int] = None) -> Union[float, np.ndarray
     """
     return np.random.weibull(shape, size)
 
-
 def uniform(low: float = 0.0, high: float = 1.0, size: Optional[int] = None) -> Union[float, np.ndarray]:
     """
     Uniform distribution (all values equally likely)
@@ -134,7 +127,6 @@ def uniform(low: float = 0.0, high: float = 1.0, size: Optional[int] = None) -> 
     Use case: Random events, coin flips, unbiased selection
     """
     return np.random.uniform(low, high, size)
-
 
 def triangular(left: float, mode: float, right: float, size: Optional[int] = None) -> Union[float, np.ndarray]:
     """
@@ -170,7 +162,6 @@ def poisson(lam: float, size: Optional[int] = None) -> Union[int, np.ndarray]:
     """
     return np.random.poisson(lam, size)
 
-
 def binomial(n: int, p: float, size: Optional[int] = None) -> Union[int, np.ndarray]:
     """
     Binomial distribution (number of successes in n trials)
@@ -187,7 +178,6 @@ def binomial(n: int, p: float, size: Optional[int] = None) -> Union[int, np.ndar
     """
     return np.random.binomial(n, p, size)
 
-
 def geometric(p: float, size: Optional[int] = None) -> Union[int, np.ndarray]:
     """
     Geometric distribution (number of trials until first success)
@@ -202,7 +192,6 @@ def geometric(p: float, size: Optional[int] = None) -> Union[int, np.ndarray]:
     Use case: Plays until first down, attempts until touchdown
     """
     return np.random.geometric(p, size)
-
 
 def negative_binomial(n: float, p: float, size: Optional[int] = None) -> Union[int, np.ndarray]:
     """
@@ -220,7 +209,6 @@ def negative_binomial(n: float, p: float, size: Optional[int] = None) -> Union[i
     """
     return np.random.negative_binomial(n, p, size)
 
-
 def hypergeometric(ngood: int, nbad: int, nsample: int, size: Optional[int] = None) -> Union[int, np.ndarray]:
     """
     Hypergeometric distribution (sampling without replacement)
@@ -237,7 +225,6 @@ def hypergeometric(ngood: int, nbad: int, nsample: int, size: Optional[int] = No
     Use case: Selecting players from a roster, sampling without replacement
     """
     return np.random.hypergeometric(ngood, nbad, nsample, size)
-
 
 # ==================== SPECIALTY FUNCTIONS ====================
 
@@ -270,7 +257,6 @@ def truncated_normal(mean: float, std_dev: float, lower: float, upper: float, si
                 samples.append(value)
         return np.array(samples)
 
-
 def skew_normal(location: float, scale: float, skew: float, size: Optional[int] = None) -> Union[float, np.ndarray]:
     """
     Approximation of skew-normal distribution using gamma and normal
@@ -300,7 +286,6 @@ def skew_normal(location: float, scale: float, skew: float, size: Optional[int] 
         shape = 4 / (skew ** 2)
         samples = np.random.gamma(shape, scale / np.sqrt(shape), size)
         return location - samples + (shape * scale / np.sqrt(shape))
-
 
 def mixture_normal(means: list[float], std_devs: list[float], weights: list[float], size: Optional[int] = None) -> Union[float, np.ndarray]:
     """

@@ -9,18 +9,7 @@ class Base(Enum):
     FST = "1ST"
     SND = "2ND"
     THD = "3RD"
-    HME = "HOME"
-
-class BaseState(Enum):
-    _000 = "0_0_0"
-    _100 = "1_0_0"
-    _010 = "0_1_0"
-    _001 = "0_0_1"
-    _110 = "1_1_0"
-    _101 = "1_0_1"
-    _011 = "0_1_1"
-    _111 = "1_1_1"
-
+    HME = "HME"
 
 class Outcome(Enum):
     """All possible at-bat outcomes"""
@@ -42,21 +31,6 @@ class HitTypes(Enum):
     FB = "FLYBALL"
     LD = "LINEDRIVE"
     PU = "POPUP"
-
-class HitSectors(Enum):
-    LL = "LEFT FIELD LINE"
-    LF = "LEFT FIELD"
-    LC = "LEFT CENTER"
-    CF = "CENTER FIELD"
-    RC = "RIGHT CENTER"
-    RF = "RIGHT FIELD"
-    RL = "RIGHT FIELD LINE"
-
-class HitDepths(Enum):
-    SH = "SHORT"
-    MD = "MEDIUM"
-    DP = "DEEP"
-    XD = "EXTRA DEEP"
 
 class PitchResult(Enum):
     """Pitch result codes for pitch sequences"""

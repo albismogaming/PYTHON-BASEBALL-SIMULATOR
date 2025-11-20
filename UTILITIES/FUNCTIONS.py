@@ -2,8 +2,6 @@ import time
 import re
 import numpy as np
 from termcolor import colored
-from UTILITIES.SETTINGS import *
-
 
 @staticmethod
 def rgb_colored(text, rgb, bg_rgb=None):
@@ -29,14 +27,6 @@ def strip_ansi(text):
     """Remove ANSI color codes from text."""
     return re.sub(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', text)
 
-def initialize_random_seed(seed=RAND_SEED):
-    # If no seed is provided, generate a new one and set it
-    if seed is None:
-        seed = np.random.randint(0, 2**31 - 1)
-    np.random.seed(seed)  # Set the seed for reproducibility
-    print(f"SIMULATION SEED: {seed}")
-    return seed
-
 def time_format(secs):
     mins = int(secs // 60)
     rem_secs = int(secs % 60)
@@ -48,14 +38,4 @@ def print_delay(items, delay=0):
         print(item, end='', flush=True)  # `flush=True` forces the output to be written immediately
         time.sleep(delay)  # Wait for 'delay' seconds before printing the next item
     print()  # Move to the next line after all items are printed
-
-def exit_button():
-    text = colored(f"""
-┏┳━━━━━━━━━━━━━━━━━━━━━┳┓
-┃┃ PRESS ENTER TO EXIT ┃┃
-┗┻━━━━━━━━━━━━━━━━━━━━━┻┛                                    
-""", 'green', attrs=['bold'])
-    input(text)
-    
-    print()
 
