@@ -1,43 +1,30 @@
 from typing import Dict
-
+from UTILITIES.RANDOM import get_random
+import math as m
 
 class ProbabilityModifier:
-    """
-    Applies situational modifiers to precomputed base matchup probabilities.
-    
-    Base matchup probabilities come from the precomputed table (batter vs pitcher).
-    This class applies contextual adjustments like park factors, game situation, etc.
-    """
+    """ Applies situational modifiers to precomputed base matchup probabilities. """
     
     @staticmethod
-    def apply_park_factors(probabilities: Dict[str, float], park_factors: Dict[str, float]) -> Dict[str, float]:
-        """ Apply park factors to base probabilities. """
+    def calculate_probability(batter_prob, pitcher_prob, batter_weight=0.50, pitcher_weight=0.50):
+        """ Calculate combined probability using logit transformation (log-odds). """
+        # Avoid division by zero and extreme values
+        epsilon = 1e-6
+        batter_prob = max(epsilon, min(batter_prob, 1 - epsilon))
+        pitcher_prob = max(epsilon, min(pitcher_prob, 1 - epsilon))
         
-        adjusted = {}
-        for outcome, prob in probabilities.items():
-            # Apply park factor if it exists for this outcome
-            if outcome in park_factors:
-                adjusted[outcome] = prob * park_factors[outcome]
-            else:
-                adjusted[outcome] = prob
+        # Convert to log-odds (logit transformation)
+        batter_logit = m.log(batter_prob / (1 - batter_prob))
+        pitcher_logit = m.log(pitcher_prob / (1 - pitcher_prob))
         
-        return adjusted
-    
-    @staticmethod
-    def apply_league_factors(probabilities: Dict[str, float], league_averages: Dict[str, float]) -> Dict[str, float]:
-        """ Regress probabilities toward league average. """
+        # Weighted average in log-odds space
+        combined_logit = (batter_logit * batter_weight) + (pitcher_logit * pitcher_weight)
+        
+        # Convert back to probability (inverse logit)
+        return 1 / (1 + m.exp(-combined_logit))
 
-        adjusted = {}
-        for outcome, prob in probabilities.items():
-            if outcome in league_averages:
-                adjusted[outcome] = prob * league_averages[outcome]
-            else:
-                adjusted[outcome] = prob
-
-        return adjusted
-    
     @staticmethod
-    def apply_situational_modifiers(probabilities: Dict[str, float], modifiers: Dict[str, float]) -> Dict[str, float]:
+    def apply_modifiers(probabilities: Dict[str, float], modifiers: Dict[str, float]) -> Dict[str, float]:
         """ Apply situational modifiers to probabilities. """
 
         adjusted = {}
@@ -47,57 +34,66 @@ class ProbabilityModifier:
         
         return adjusted
     
-    @staticmethod
-    def apply_all_modifiers(base_probs: Dict[str, float], 
-                            league_averages: Dict[str, float] | None = None, 
-                            park_factors: Dict[str, float] | None = None,
-                            situational_modifiers: Dict[str, float] | None = None) -> Dict[str, float]:
-        """
-        Apply all modifiers to base probabilities in sequence.
-        
-        Recommended pipeline:
-        1. League regression (normalize to context)
-        2. Park factors (stadium effects)
-        3. Situational modifiers (clutch, fatigue, etc.)
-        
-        Args:
-            base_probabilities: Base matchup probabilities from precomputed table
-            league_averages: Optional league average rates for regression
-            park_factors: Optional park factor adjustments
-            situational_modifiers: Optional situational adjustments
-            regression_weight: How much to regress toward league mean (default 0.1)
-            
-        Returns:
-            dict: Fully adjusted probabilities
-        """
-        probs = base_probs.copy()
-        
-        # Apply league regression if provided
-        if league_averages:
-            probs = ProbabilityModifier.apply_league_factors(probs, league_averages)
-        
-        # Apply park factors if provided
-        if park_factors:
-            probs = ProbabilityModifier.apply_park_factors(probs, park_factors)
-        
-        # Apply situational modifiers if provided
-        if situational_modifiers:
-            probs = ProbabilityModifier.apply_situational_modifiers(probs, situational_modifiers)
-        
-        # Ensure all probabilities are within valid range [0, 1]
-        probs = {outcome: max(0.0, min(1.0, prob)) 
-                for outcome, prob in probs.items()}
-        
-        return probs
+    # Base platoon modifiers (neutral matchup = 1.0)
+    # These represent typical MLB platoon effects
+    BASE_PLATOON_ADVANTAGE = {
+        'BA': 1.10,     # Higher batting average for favorable matchup
+        'SO': 0.90,     # Fewer strikeouts
+        'BB': 1.10,     # Better discipline
+        'HP': 1.05,     # Hit by pitch advantage
+        'HR': 1.12,     # Power advantage for favorable matchup
+        'IH': 1.08,     # Infield hits advantage
+        'SL': 1.08,     # Singles advantage
+        'DL': 1.08,     # Doubles advantage
+        'TL': 1.10,     # Triples slightly boosted
+        'GO': 0.92,     # Fewer groundouts
+        'FO': 0.92,     # Fewer flyouts
+        'LO': 0.92,     # Fewer lineouts
+        'PO': 0.92,     # Fewer popouts
+    }
+    
+    BASE_PLATOON_DISADVANTAGE = {
+        'BA': 0.90,     # Lower batting average for unfavorable matchup
+        'SO': 1.10,     # More strikeouts
+        'BB': 0.90,     # Worse discipline
+        'HP': 0.95,     # Hit by pitch disadvantage
+        'HR': 0.88,     # Power disadvantage for unfavorable matchup
+        'IH': 0.92,     # Infield hits disadvantage
+        'SL': 0.92,     # Singles disadvantage
+        'DL': 0.92,     # Doubles disadvantage
+        'TL': 0.90,     # Triples slightly reduced
+        'GO': 1.08,     # More groundouts
+        'FO': 1.08,     # More flyouts
+        'LO': 1.08,     # More lineouts
+        'PO': 1.08,     # More popouts
+    }
     
     @staticmethod
-    def normalize_probabilities(probabilities: Dict[str, float]) -> Dict[str, float]:
-        """ Normalize a set of probabilities to sum to 1.0. """
-        total = sum(probabilities.values())
+    def get_platoon_split_modifiers(batter, pitcher, use_variability: bool = True) -> Dict[str, float]:
+        """ Calculate platoon modifiers for this specific matchup with optional randomized strength. """
         
-        if total == 0:
-            # Avoid division by zero - return uniform distribution
-            num_outcomes = len(probabilities)
-            return {outcome: 1.0 / num_outcomes for outcome in probabilities}
+        # Switch hitters always bat from favorable side
+        if batter.bats == 'B':
+            base_mods = ProbabilityModifier.BASE_PLATOON_ADVANTAGE
+        # Same-handed = disadvantage (LHB vs LHP, RHB vs RHP)
+        elif batter.bats == pitcher.throws:
+            base_mods = ProbabilityModifier.BASE_PLATOON_DISADVANTAGE
+        # Opposite-handed = advantage (LHB vs RHP, RHB vs LHP)
+        else:
+            base_mods = ProbabilityModifier.BASE_PLATOON_ADVANTAGE
         
-        return {outcome: prob / total for outcome, prob in probabilities.items()}
+        # Add variability: randomize strength from 50% to 100% of base effect
+        if use_variability:
+            # Random factor between 0.5 and 1.0 (different per matchup)
+            strength = 0.5 + (get_random() * 0.5)
+            
+            # Apply strength to move modifiers closer to neutral (1.0)
+            modifiers = {
+                outcome: 1.0 + (multiplier - 1.0) * strength
+                for outcome, multiplier in base_mods.items()
+            }
+        else:
+            # Use full base modifiers
+            modifiers = base_mods.copy()
+        
+        return modifiers
