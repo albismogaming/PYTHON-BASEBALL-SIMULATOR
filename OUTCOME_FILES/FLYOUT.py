@@ -1,5 +1,6 @@
+from requests import get
 from UTILITIES.ENUMS import *
-from UTILITIES.RANDOM import get_random
+from UTILITIES.RANDOM import get_random, scr_random, out_random, adv_random, sac_random
 
 class Flyout:
     def execute(self, gamestate, batter, pitcher):
@@ -7,21 +8,21 @@ class Flyout:
         runs = 0
         outs = 1
 
-        # Inline base state check
-        if gamestate.bases[Base.THD] is not None:
-            if gamestate.outs < 2:
-                adv = get_random()
+        bases = gamestate.bases
+        r1 = bases[Base.FST] is not None
+        r2 = bases[Base.SND] is not None
+        r3 = bases[Base.THD] is not None
 
-                if adv <= 0.078:
+        # Inline base state check
+        if r3:
+            if gamestate.outs < 2:
+                if get_random() < sac_random():  # Dynamic threshold for scoring from 3rd
                     # 7.8% - R3 tags and scores without throw
                     gamestate.bases[Base.THD] = None
                     runs += 1
 
-                elif adv <= 0.526:  # 0.078 + 0.448 = cumulative
-                    # 44.8% - R3 attempts to tag
-                    out = get_random()
-
-                    if out <= 0.064:
+                elif get_random() < adv_random():       
+                    if get_random() < out_random():
                         # 6.4% thrown out at home
                         gamestate.bases[Base.THD] = None
                         outs += 1
@@ -29,8 +30,6 @@ class Flyout:
                         # 93.6% safe at home
                         gamestate.bases[Base.THD] = None
                         runs += 1
-                # else: 47.4% - R3 holds
-            
             else:
                 # 2 outs - runner clears base without scoring (out ends inning)
                 gamestate.bases[Base.THD] = None

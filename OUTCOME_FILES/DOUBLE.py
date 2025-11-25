@@ -1,5 +1,5 @@
 from UTILITIES.ENUMS import *
-from UTILITIES.RANDOM import get_random
+from UTILITIES.RANDOM import get_random, scr_random, out_random, adv_random
 
 class Double:
     def execute(self, gamestate, batter, pitcher):
@@ -7,10 +7,10 @@ class Double:
         runs = 0
         outs = 0
         
-        # Inline base state checks
-        r1 = gamestate.bases[Base.FST] is not None
-        r2 = gamestate.bases[Base.SND] is not None
-        r3 = gamestate.bases[Base.THD] is not None
+        bases = gamestate.bases
+        r1 = bases[Base.FST] is not None
+        r2 = bases[Base.SND] is not None
+        r3 = bases[Base.THD] is not None
 
         if r3:
             gamestate.bases[Base.THD] = None
@@ -21,8 +21,8 @@ class Double:
             runs += 1
 
         if r1:
-            if get_random() <= 0.570:
-                if get_random() <= 0.055:
+            if get_random() <= scr_random():  # Dynamic threshold for scoring from 1st
+                if get_random() <= out_random():
                     gamestate.bases[Base.FST] = None
                     outs += 1
                 else:

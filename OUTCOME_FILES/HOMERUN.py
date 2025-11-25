@@ -6,15 +6,21 @@ class Homerun:
         runs = 1
         outs = 0
 
-        if gamestate.bases[Base.THD] is not None:
+        bases = gamestate.bases
+        r1 = bases[Base.FST] is not None
+        r2 = bases[Base.SND] is not None
+        r3 = bases[Base.THD] is not None
+
+
+        if r3:
             runs += 1
             gamestate.bases[Base.THD] = None
             
-        if gamestate.bases[Base.SND] is not None:
+        if r2:
             runs += 1
             gamestate.bases[Base.SND] = None
             
-        if gamestate.bases[Base.FST] is not None:
+        if r1:
             runs += 1
             gamestate.bases[Base.FST] = None
         

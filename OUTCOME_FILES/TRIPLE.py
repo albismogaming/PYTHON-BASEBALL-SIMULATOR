@@ -6,9 +6,10 @@ class Triple:
         runs = 0
         outs = 0
         
-        r1 = gamestate.bases[Base.FST] is not None
-        r2 = gamestate.bases[Base.SND] is not None
-        r3 = gamestate.bases[Base.THD] is not None
+        bases = gamestate.bases
+        r1 = bases[Base.FST] is not None
+        r2 = bases[Base.SND] is not None
+        r3 = bases[Base.THD] is not None
 
         if r3:
             gamestate.bases[Base.THD] = None

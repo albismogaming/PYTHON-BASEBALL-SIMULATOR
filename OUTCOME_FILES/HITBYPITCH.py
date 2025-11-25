@@ -6,13 +6,14 @@ class HitByPitch:
         runs = 0
         outs = 0
 
-        r1 = gamestate.bases[Base.FST] is not None
-        r2 = gamestate.bases[Base.SND] is not None
-        r3 = gamestate.bases[Base.THD] is not None
+        bases = gamestate.bases
+        r1 = bases[Base.FST] is not None
+        r2 = bases[Base.SND] is not None
+        r3 = bases[Base.THD] is not None
 
         # Process R3 → R2 → R1 (reverse order to avoid overwrites)
         # R3: Only forced if bases loaded
-        if r3 and r1 and r2:
+        if r3 and r2 and r1:
             # Bases loaded - R3 forced home
             gamestate.bases[Base.THD] = None
             runs += 1
