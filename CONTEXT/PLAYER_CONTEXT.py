@@ -19,8 +19,9 @@ class Player:
     throws: str  # L or R
     
     # Raw stats (only used for precomputation, not during simulation)
-    bat_stats_raw: Dict[str, float]  # SO, BB, HP, HR, IH, SL, DL, TL, BABIP, GBFB
-    pit_stats_raw: Dict[str, float]  # SO, BB, HP, HR, IH, SL, DL, TL, BABIP, GBFB
+    base_stats: Dict[str, float]  # SO, BB, HP, HR, BA (BABIP)
+    hits_stats: Dict[str, float]   # IH, SL, DL, TL
+    outs_stats: Dict[str, float]   # GO, FO, LO, PO
     
     # Additional attributes
     bat_profile: Optional[int] = None  # Batter profile for hit type distribution
@@ -41,49 +42,32 @@ class Player:
         """Get player's full name."""
         return f"{self.first_name} {self.last_name}"
     
-    @property
-    def is_switch_hitter(self):
-        """Check if player is a switch hitter."""
-        return self.bats == 'B'
-    
     @staticmethod
     def from_csv_row(row: dict, team_abbrev: str) -> 'Player':
-        """
-        Create Player from CSV row dictionary.
-        
-        Args:
-            row: Dictionary from pandas DataFrame row
-            team_abbrev: Team abbreviation
-            
-        Returns:
-            Player instance
-        """
-        # Extract all batter stats into flat dict
-        bat_stats_raw = {
-            'SO': row['b_SO'],
-            'BB': row['b_BB'],
-            'HP': row['b_HP'],
-            'HR': row['b_HR'],
-            'IH': row['b_IH'],
-            'SL': row['b_SL'],
-            'DL': row['b_DL'],
-            'TL': row['b_TL'],
-            'BABIP': row['b_BABIP'],
-            'GBFB': row['b_GBFB']
+        """ Create Player from CSV row dictionary. """
+        # Extract base outcome stats (strikeout, walk, hit by pitch, home run, BABIP)
+        base_stats = {
+            'SO': row['SO'],
+            'BB': row['BB'],
+            'HP': row['HP'],
+            'HR': row['HR'],
+            'BA': row['BABIP']
         }
         
-        # Extract all pitcher stats into flat dict
-        pit_stats_raw = {
-            'SO': row['p_SO'],
-            'BB': row['p_BB'],
-            'HP': row['p_HP'],
-            'HR': row['p_HR'],
-            'IH': row['p_IH'],
-            'SL': row['p_SL'],
-            'DL': row['p_DL'],
-            'TL': row['p_TL'],
-            'BABIP': row['p_BABIP'],
-            'GBFB': row['p_GBFB']
+        # Extract hit type distribution (infield hit, single, double, triple)
+        hits_stats = {
+            'IH': row['IH'],
+            'SL': row['SL'],
+            'DL': row['DL'],
+            'TL': row['TL']
+        }
+        
+        # Extract out type distribution (ground out, fly out, line out, pop out)
+        outs_stats = {
+            'GO': row['GO'],
+            'FO': row['FO'],
+            'LO': row['LO'],
+            'PO': row['PO']
         }
         
         return Player(
@@ -95,8 +79,9 @@ class Player:
             position=row['POS'],
             bats=row['B'],
             throws=row['T'],
-            bat_stats_raw=bat_stats_raw,
-            pit_stats_raw=pit_stats_raw,
+            base_stats=base_stats,
+            hits_stats=hits_stats,
+            outs_stats=outs_stats,
             bat_profile=row['BAT_PROFILE'],
             average=row['AVG'],
             clutch=row['CLU'],
