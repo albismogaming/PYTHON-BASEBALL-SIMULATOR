@@ -1,7 +1,6 @@
 import time
 import re
-import numpy as np
-from termcolor import colored
+from typing import Dict
 
 @staticmethod
 def rgb_colored(text, rgb, bg_rgb=None):
@@ -38,4 +37,4 @@ def print_delay(items, delay=0):
         print(item, end='', flush=True)  # `flush=True` forces the output to be written immediately
         time.sleep(delay)  # Wait for 'delay' seconds before printing the next item
     print()  # Move to the next line after all items are printed
-
+    
