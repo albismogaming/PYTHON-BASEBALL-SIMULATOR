@@ -5,11 +5,11 @@ from GAME_LOGIC.GAMESTATE import GameState
 from TEAM_UTILS.LINEUP_MANAGER import LineupManager
 from TEAM_UTILS.PITCHING_MANAGER import PitchingManager
 from ATBAT.ATBAT_SIM import AtBatSimulator
-from OUTCOME_ENGINE.OUTCOME_TOKEN import MatchupTokenGenerator
 from TEAM_UTILS.STATS_MANAGER import StatsManager
 from UTILITIES.FUNCTIONS import *
-from UTILITIES.FILE_PATHS import TEAM_META, TEAM_PATH, LEAGUE_DATA
+from UTILITIES.FILE_PATHS import TEAM_META, LEAGUE_DATA, ALL_TEAM_PATH
 from UTILITIES.RANDOM import init_random_pool
+
 
 def setup_managers(team):
     lineup_mgr = LineupManager(team.batters)
@@ -23,24 +23,23 @@ def setup_managers(team):
     
     return lineup_mgr, pitching_mgr
 
+
 def simulate_half_inning(gamestate, batting_lineup, pitching_mgr):
     """ Simulate one half-inning (3 outs). """
     # Reset half-inning state
     gamestate.reset_half_inning()
     
     while gamestate.outs < 3:
-        # Get current batter and pitcher
-        batter, pitcher = AtBatSimulator.step_initialize_matchup(batting_lineup, pitching_mgr)
-        
-        # Simulate the at-bat (generate probabilities, determine outcome, execute)
-        AtBatSimulator.simulate_at_bat(gamestate, batter, pitcher)
-        
+        # Get current batter and pitcher, calculate base probabilities
+        batter, pitcher, base_probs = AtBatSimulator.step_initialize_matchup(batting_lineup, pitching_mgr)
+        # Simulate the at-bat (apply modifiers, determine outcome, execute)
+        AtBatSimulator.simulate_at_bat(gamestate, batter, pitcher, base_probs)
         # Advance to next batter
         AtBatSimulator.step_advance_batter(batting_lineup)
-        
         # Check if pitcher should be changed (after at-bat, before next batter faces them)
         if pitching_mgr.should_change_pitcher():
             pitching_mgr.change_pitcher()
+
 
 def simulate_inning(gamestate, away_team, home_team, away_lineup, away_pitching, home_lineup, home_pitching):
     """ Simulate one full inning (top and bottom). """
@@ -84,18 +83,20 @@ def play_game(away_team, home_team):
 
 
 def load_game_data():
-    """
-    Initialize all game data (caches, league context, random pool).
-    Call this once before running games.
-    """
+    """ Initialize all game data (player cache, league context, random pool). Call this once before running games. """   
     init_random_pool(size=500)
-    MatchupTokenGenerator.initialize_cache()
+    
+    # Load all players from ALL_TEAMS.csv
+    TeamLoader.initialize_player_cache(ALL_TEAM_PATH)
     LeagueLoader.load_league_data(LEAGUE_DATA, 2025)
 
 
 def load_team(team_abbrev: str):
-    """ Load a single team from CSV files. """
-    return TeamLoader.load_full_team(team_abbrev=team_abbrev, roster_csv=f"{TEAM_PATH}\\{team_abbrev}.csv", teams_csv=TEAM_META)
+    """ Load a single team from the player cache. """   
+    if not TeamLoader._cache_initialized:
+        raise RuntimeError("Player cache not initialized. Call load_game_data() first.")
+    
+    return TeamLoader.load_team_from_cache(team_abbrev=team_abbrev, teams_csv=TEAM_META)
 
 
 if __name__ == "__main__":
@@ -105,7 +106,7 @@ if __name__ == "__main__":
     
     # Load teams
     away_abbrev = "PIT"
-    home_abbrev = "CHR"
+    home_abbrev = "WAS"
     
     print(f"Loading teams: {away_abbrev} @ {home_abbrev}")
     away_team = load_team(away_abbrev)
@@ -119,20 +120,3 @@ if __name__ == "__main__":
     
     elapsed = time.time() - start_time
     print(f"\nGame simulated in {elapsed:.7f} seconds")
-
-    # Debug: Show pitcher keys
-    print("\nPitcher keys in stats:")
-    for key in StatsManager.pitcher_stats.keys():
-        stats = StatsManager.pitcher_stats[key]
-        print(f"  {key} -> {stats['player'].full_name} ({stats['player'].team_abbrev})")
-    
-    # Print stats
-    print("\n" + "="*80)
-    print(f"PITCHING STATS - {away_abbrev}")
-    print("="*80)
-    print(StatsManager.format_pitching_stats(away_abbrev))
-    
-    print("\n" + "="*80)
-    print(f"PITCHING STATS - {home_abbrev}")
-    print("="*80)
-    print(StatsManager.format_pitching_stats(home_abbrev))

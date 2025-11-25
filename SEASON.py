@@ -1,29 +1,26 @@
 import csv
 import time
-from collections import defaultdict
 from GAMEDAY import play_game, load_game_data, load_team
-from UTILITIES.FILE_PATHS import TEAM_META
+from DATA_LOADERS.TEAM_LOADER import TeamLoader
+from UTILITIES.FILE_PATHS import TEAM_META, ALL_TEAM_PATH
 from UTILITIES.COLOR_CODES import *
+
 
 class SeasonSimulator:
     def __init__(self, schedule_csv: str):
-        """
-        Initialize season simulator with schedule CSV file.
-        
-        Args:
-            schedule_csv: Path to CSV file containing game schedule
-                         Expected columns: date, away_team, home_team
-        """
+        """ Initialize season simulator with schedule CSV file. """       
         self.schedule_csv = schedule_csv
         self.schedule = []
-        self.standings = defaultdict(lambda: {'wins': 0, 'losses': 0, 'runs_scored': 0, 'runs_allowed': 0})
         self.game_results = []
         self.teams_cache = {}  # Cache loaded teams for reuse
+        self.team_records = {}  # Track W-L records for each team
         self._initialized = False
         
         self._load_schedule()
         self._load_team_info()
+        self._initialize_records()
     
+
     def _load_team_info(self):
         """Load team information from TEAM_META.csv"""
         self.team_info = {}
@@ -31,12 +28,15 @@ class SeasonSimulator:
             reader = csv.DictReader(f)
             for row in reader:
                 abbrev = row['team_abbrev']
-                self.team_info[abbrev] = {
-                    'market': row['market'],
-                    'name': row['team_name'],
-                    'league': row['league']
-                }
+                self.team_info[abbrev] = {'market': row['market'], 'name': row['team_name'], 'league': row['league']}
     
+
+    def _initialize_records(self):
+        """Initialize win-loss records for all teams."""
+        for abbrev in self.team_info.keys():
+            self.team_records[abbrev] = {'wins': 0, 'losses': 0}
+    
+
     def _load_schedule(self):
         """Load schedule from CSV file"""
         try:
@@ -56,12 +56,14 @@ class SeasonSimulator:
             print(f"{RED}✗{RESET} Missing required column in schedule CSV: {e}")
             raise
     
+
     def _get_team(self, team_abbrev: str):
         """Get team from cache or load if not cached."""
         if team_abbrev not in self.teams_cache:
             self.teams_cache[team_abbrev] = load_team(team_abbrev)
         return self.teams_cache[team_abbrev]
     
+
     def simulate_game(self, game_num: int, away_abbrev: str, home_abbrev: str, show_score: bool = True):
         """ Simulate a single game and update standings. """
         try:
@@ -71,19 +73,13 @@ class SeasonSimulator:
             
             away_score, home_score = play_game(away_team, home_team)
             
-            # Update standings
+            # Update records
             if away_score > home_score:
-                self.standings[away_abbrev]['wins'] += 1
-                self.standings[home_abbrev]['losses'] += 1
+                self.team_records[away_abbrev]['wins'] += 1
+                self.team_records[home_abbrev]['losses'] += 1
             else:
-                self.standings[home_abbrev]['wins'] += 1
-                self.standings[away_abbrev]['losses'] += 1
-            
-            # Update run differentials
-            self.standings[away_abbrev]['runs_scored'] += away_score
-            self.standings[away_abbrev]['runs_allowed'] += home_score
-            self.standings[home_abbrev]['runs_scored'] += home_score
-            self.standings[home_abbrev]['runs_allowed'] += away_score
+                self.team_records[home_abbrev]['wins'] += 1
+                self.team_records[away_abbrev]['losses'] += 1
             
             # Store result
             result = {
@@ -96,10 +92,12 @@ class SeasonSimulator:
             self.game_results.append(result)
             
             if show_score:
+                away_rec = self.team_records[away_abbrev]
+                home_rec = self.team_records[home_abbrev]
                 winner_color = GREEN if away_score > home_score else CYAN
                 loser_color = CYAN if away_score > home_score else GREEN
-                print(f"Game {game_num:3}: {loser_color if away_score > home_score else winner_color}{away_abbrev} {away_score:2}{RESET} @ "
-                      f"{loser_color if home_score > away_score else winner_color}{home_abbrev} {home_score:2}{RESET}")
+                print(f"Game {game_num:3}: {loser_color if away_score > home_score else winner_color}{away_abbrev} {away_score:2}{RESET} ({away_rec['wins']}-{away_rec['losses']}) @ "
+                      f"{loser_color if home_score > away_score else winner_color}{home_abbrev} {home_score:2}{RESET} ({home_rec['wins']}-{home_rec['losses']})")
             
             return away_score, home_score
             
@@ -107,6 +105,7 @@ class SeasonSimulator:
             print(f"{RED}✗{RESET} Error simulating {away_abbrev} @ {home_abbrev}: {e}")
             raise
     
+
     def simulate_season(self, verbose: bool = True, show_progress: bool = True):
         """
         Simulate entire season from schedule.
@@ -123,7 +122,13 @@ class SeasonSimulator:
         if not self._initialized:
             print(f"{YELLOW}Initializing game data (caches, league context)...{RESET}")
             init_time = time.time()
+            
+            # Load all players once from ALL_TEAMS.csv
+            TeamLoader.initialize_player_cache(ALL_TEAM_PATH)
+            
+            # Initialize other game data (matchup cache, league context, etc.)
             load_game_data()
+            
             self._initialized = True
             print(f"{GREEN}✓{RESET} Initialized in {time.time() - init_time:.3f}s\n")
         
@@ -148,12 +153,7 @@ class SeasonSimulator:
         print(f"{BOLD}{'='*60}{RESET}\n")  # Extra newlines for spacing
     
     def export_results(self, output_csv: str):
-        """
-        Export game results to CSV file.
-        
-        Args:
-            output_csv: Path to output CSV file
-        """
+        """Export game results to CSV file."""
         try:
             with open(output_csv, 'w', newline='') as f:
                 fieldnames = ['game_num', 'away_team', 'home_team', 'away_score', 'home_score']
@@ -168,12 +168,12 @@ class SeasonSimulator:
 def main():
     """Main entry point for season simulation"""
     # Example usage - modify schedule path as needed
-    schedule_file = "GAME_DATA\\SCHEDULE.csv"
+    schedule_file = "GAME_DATA\\SCHEDULE1.csv"
     
     # Create simulator
     sim = SeasonSimulator(schedule_csv=schedule_file)
     
-    # Simulate season
+    # Simulate season (verbose=False for maximum speed)
     sim.simulate_season(verbose=True, show_progress=True)
     
     # Export results
