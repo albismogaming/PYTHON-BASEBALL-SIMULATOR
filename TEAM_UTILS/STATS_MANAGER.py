@@ -9,13 +9,17 @@ class StatsManager:
     # Class-level dictionaries to store all stats
     batter_stats: Dict = {}  # Key: (team_abbrev, player_id), Value: stat dict
     pitcher_stats: Dict = {}  # Key: (team_abbrev, player_id), Value: stat dict
+    _key_cache: Dict = {}  # Cache player keys to avoid repeated tuple creation
     
     # ==================== INITIALIZATION ====================
     
     @staticmethod
     def _get_player_key(player):
-        """Get hashable key for a player."""
-        return (player.team_abbrev, player.player_id)
+        """Get hashable key for a player (cached)."""
+        player_id = id(player)
+        if player_id not in StatsManager._key_cache:
+            StatsManager._key_cache[player_id] = (player.team_abbrev, player.player_id)
+        return StatsManager._key_cache[player_id]
     
     @staticmethod
     def initialize_batter(batter):
@@ -71,7 +75,7 @@ class StatsManager:
     # ==================== RECORD STATS ====================
     
     @staticmethod
-    def record_at_bat(batter, pitcher, outcome: Outcome, pitch_count: int, runs_scored: int = 0, rbi: int = 0):
+    def record_at_bat(batter, pitcher, outcome: Outcome, pitch_count: int, runs_scored: int = 0, rbi: int = 0, outs_recorded: int = 0):
         """
         Record a complete at-bat with all relevant stats.
         
@@ -82,6 +86,7 @@ class StatsManager:
             pitch_count: Number of pitches in the at-bat
             runs_scored: Runs scored by the batter on this play
             rbi: RBIs credited to the batter
+            outs_recorded: Number of outs recorded on this play (0-2)
         """
         StatsManager.initialize_batter(batter)
         StatsManager.initialize_pitcher(pitcher)
@@ -90,7 +95,7 @@ class StatsManager:
         StatsManager._update_batter_stats(batter, outcome, runs_scored, rbi)
         
         # Update pitcher stats
-        StatsManager._update_pitcher_stats(pitcher, outcome, pitch_count)
+        StatsManager._update_pitcher_stats(pitcher, outcome, pitch_count, outs_recorded)
     
     @staticmethod
     def _update_batter_stats(batter, outcome: Outcome, runs_scored: int, rbi: int):
@@ -137,7 +142,7 @@ class StatsManager:
         stats['RBI'] += rbi
     
     @staticmethod
-    def _update_pitcher_stats(pitcher, outcome: Outcome, pitch_count: int):
+    def _update_pitcher_stats(pitcher, outcome: Outcome, pitch_count: int, outs_recorded: int):
         """Update pitcher statistics based on outcome."""
         key = StatsManager._get_player_key(pitcher)
         stats = StatsManager.pitcher_stats[key]
@@ -162,10 +167,9 @@ class StatsManager:
         if outcome == Outcome.SO:
             stats['SO'] += 1
         
-        # Outs recorded
-        if outcome in [Outcome.SO, Outcome.GO, Outcome.FO, Outcome.LO, Outcome.PO]:
-            stats['Outs'] += 1
-            stats['IP'] = stats['Outs'] / 3.0
+        # Outs recorded (can be 0, 1, or 2)
+        stats['Outs'] += outs_recorded
+        stats['IP'] = stats['Outs'] / 3.0
     
     @staticmethod
     def record_run_for_pitcher(pitcher, earned: bool = True):
