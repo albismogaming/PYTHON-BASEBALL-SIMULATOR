@@ -1,141 +1,193 @@
-from ATBAT.ATBAT_FACTORY import AtBatFactory
-from ATBAT.ATBAT_PITCHES import PitchCountGenerator
+from re import I
+from ATBAT.ATBAT_PITCHES import PitchEngine as PE
 from ATBAT.ATBAT_PROBS import ProbabilityModifier
-from TEAM_UTILS.STATS_MANAGER import StatsManager
-from UTILITIES.ENUMS import Outcome
+from CONTEXT.ATBAT_CONTEXT import AtBatToken, AtBatEvent, AtBatResult
+from UTILITIES.ENUMS import EventType, Pitch, Micro, Macro, StatKey
 from UTILITIES.RANDOM import get_random
 from DATA_LOADERS.LEAGUE_STATS_LOADER import LeagueLoader
 
+
 class AtBatSimulator:
     """ Step-by-step at-bat simulation with live probability calculation. """
-    
     # Pre-defined outcome lists (avoid recreating on every at-bat)
-    _BASE = (('SO', Outcome.SO), ('BB', Outcome.BB), ('HP', Outcome.HP), ('HR', Outcome.HR))
-    _HITS = (('IH', Outcome.IH), ('SL', Outcome.SL), ('DL', Outcome.DL), ('TL', Outcome.TL))
-    _OUTS = (('GO', Outcome.GO), ('FO', Outcome.FO), ('LO', Outcome.LO), ('PO', Outcome.PO))
+    _BASE = (('SO', Macro.SO), ('BB', Macro.BB), ('HP', Macro.HP), ('HR', Macro.HR))
+    _HITS = (('IH', Macro.IH), ('SL', Macro.SL), ('DL', Macro.DL), ('TL', Macro.TL))
+    _OUTS = (('GO', Macro.GO), ('FO', Macro.FO), ('LO', Macro.LO), ('PO', Macro.PO))
+    
+    # Micro event probabilities
+    _MICRO_PROBS = {
+        'WP': 0.005,      # Wild pitch (per ball)
+        'PB': 0.002,      # Passed ball (per ball)
+        'BK': 0.001,      # Balk (per pitch - rare)
+        'SB': 0.150,      # Stolen base (per ball - context dependent)
+        'P1': 0.010       # Pickoff attempt (per pitch with runner on 1st)
+    }
     
     @staticmethod
-    def step_initialize_matchup(batting_lineup_mgr, pitching_team_mgr):
-        """ Get the current batter and pitcher, then calculate base matchup probabilities. """      
-
+    def initialize_matchup(batting_lineup_mgr, pitching_team_mgr):
         batter = batting_lineup_mgr.get_current_batter()
         pitcher = pitching_team_mgr.get_current_pitcher()
+
+        return AtBatToken(batter=batter, pitcher=pitcher)
+
+    @staticmethod
+    def get_effective_handedness(batter, pitcher):
+        """ Determine effective batting handedness considering switch hitters. """
+        # Switch hitters always bat opposite the pitcher
+        batter_eff = "R" if pitcher.throws == "L" else "L" if batter.bats == "B" else batter.bats
+        pitcher_eff = pitcher.throws
         
-        # Calculate base probabilities for all outcomes (before modifiers)
+        return batter_eff, pitcher_eff
+
+    @classmethod
+    def generate_matchup_probs(cls, gamestate, token):
+        """ Generate adjusted outcome probabilities for the current batter-pitcher matchup. """
+        leag = LeagueLoader.get_league_factors() or {}
+        park = gamestate.home_team.park_factors or {}
+
+        b_eff, p_eff = cls.get_effective_handedness(token.batter, token.pitcher)
+        b_stats = token.batter.stats_vl if p_eff == "L" else token.batter.stats_vr
+        p_stats = token.pitcher.stats_vl if b_eff == "L" else token.pitcher.stats_vr
+
         base_probs = {}
-        
-        base_probs['BA'] = ProbabilityModifier.calculate_probability(
-            batter.base_stats['BA'], pitcher.base_stats['BA']
-        )
+        for stat_key in StatKey:
+            key_str = stat_key.value
+            base_probs[key_str] = ProbabilityModifier.calculate_probability(
+                b_stats[key_str], 
+                p_stats[key_str], 
+                0.50, 0.50, 
+                leag.get(key_str, 1.0), 
+                park.get(key_str, 1.0),
+            )
 
-        # Base outcomes (SO, BB, HP, HR)
-        for outcome in ['SO', 'BB', 'HP', 'HR']:
-            batter_prob = batter.base_stats[outcome]
-            pitcher_prob = pitcher.base_stats[outcome]
-            base_probs[outcome] = ProbabilityModifier.calculate_probability(batter_prob, pitcher_prob)
-        
-        # Hit outcomes (IH, SL, DL, TL)
-        for outcome in ['IH', 'SL', 'DL', 'TL']:
-            batter_prob = batter.hits_stats[outcome]
-            pitcher_prob = pitcher.hits_stats[outcome]
-            base_probs[outcome] = ProbabilityModifier.calculate_probability(batter_prob, pitcher_prob)
-        
-        # Out outcomes (GO, FO, LO, PO)
-        for outcome in ['GO', 'FO', 'LO', 'PO']:
-            batter_prob = batter.outs_stats[outcome]
-            pitcher_prob = pitcher.outs_stats[outcome]
-            base_probs[outcome] = ProbabilityModifier.calculate_probability(batter_prob, pitcher_prob)
-        
-        return batter, pitcher, base_probs
+        outcome_probs = base_probs.copy()
+        return outcome_probs
 
     @classmethod
-    def generate_matchup_probs(cls, gamestate, batter, pitcher, base_probs):
-        """ Apply modifiers to base matchup probabilities. """
-        # Start with base probabilities (already calculated in initialize_matchup)
-        outcome_probs = base_probs
-        
-        # Get BABIP from base probabilities
-        babip_prob = outcome_probs['BA']
-        
-        # Apply league factors for normalization (if available and non-neutral)
-        league_factors = LeagueLoader.get_league_factors()
-        if league_factors:
-            outcome_probs = ProbabilityModifier.apply_modifiers(outcome_probs, league_factors)
-        
-        # Apply park factors if present
-        park_factors = gamestate.home_team.park_factors
-        if park_factors:
-            outcome_probs = ProbabilityModifier.apply_modifiers(outcome_probs, park_factors)
-        
-        # Apply platoon splits with variability
-        platoon_mods = ProbabilityModifier.get_platoon_split_modifiers(batter, pitcher, use_variability=True)
-        if platoon_mods:
-            outcome_probs = ProbabilityModifier.apply_modifiers(outcome_probs, platoon_mods)
-        
-        return outcome_probs, babip_prob
-
-    @classmethod
-    def generate_final_outcome(cls, outcome_probs, babip_prob):
+    def generate_macro_outcome(cls, outcome_probs):
         """Generate the final outcome of the at-bat based on probabilities."""
-        rand_val = get_random()
-        cumulative = 0.0
+        base_rand = get_random()
+        base_cum = 0.0
         
-        # Check base outcomes in order (SO, BB, HP, HR)
         for outcome_key, outcome_enum in cls._BASE:
-            cumulative += outcome_probs[outcome_key]
-            if rand_val < cumulative:
+            base_cum += outcome_probs[outcome_key]
+            if base_rand < base_cum:
                 return outcome_enum
         
-        # Ball in play - use a separate random call to determine hit vs out with BABIP
-        if get_random() < babip_prob:
-            # Hits - select from hit distribution
-            hit_total = outcome_probs['IH'] + outcome_probs['SL'] + outcome_probs['DL'] + outcome_probs['TL']
+        babip_rand = get_random()
+        
+        if babip_rand < outcome_probs['BA']:
+            # It's a hit - determine which type
+            hit_rand = get_random()
             hit_cum = 0.0
+            hit_total = sum(outcome_probs[key] for key, _ in cls._HITS)
             
-            for outcome_key, outcome_enum in cls._HITS:
-                hit_cum += outcome_probs[outcome_key] / hit_total
-                if rand_val < hit_cum:
-                    return outcome_enum
-            return Outcome.SL  # Fallback to last hit outcome
+            if hit_total > 0:
+                for outcome_key, outcome_enum in cls._HITS:
+                    hit_cum += outcome_probs[outcome_key] / hit_total
+                    if hit_rand < hit_cum:
+                        return outcome_enum
+            
+            return Macro.SL  # Fallback if no hit type selected
         else:
-            # Outs - select from out distribution
-            out_total = outcome_probs['GO'] + outcome_probs['FO'] + outcome_probs['LO'] + outcome_probs['PO']
+            # It's an out - determine which type
+            out_rand = get_random()
             out_cum = 0.0
+            out_total = sum(outcome_probs[key] for key, _ in cls._OUTS)
             
-            for outcome_key, outcome_enum in cls._OUTS:
-                out_cum += outcome_probs[outcome_key] / out_total
-                if rand_val < out_cum:
-                    return outcome_enum
-            return Outcome.PO  # Fallback to last out outcome
+            if out_total > 0:
+                for outcome_key, outcome_enum in cls._OUTS:
+                    out_cum += outcome_probs[outcome_key] / out_total
+                    if out_rand < out_cum:
+                        return outcome_enum
+            
+            return Macro.GO # Fallback if no hit type selected
 
     @classmethod
-    def simulate_at_bat(cls, gamestate, batter, pitcher, base_probs):
-        """ Simulate a complete at-bat: apply modifiers, determine outcome, and execute it. """
-        # Apply modifiers to base probabilities
-        outcome_probs, modified_babip = cls.generate_matchup_probs(gamestate, batter, pitcher, base_probs)
-        
-        # Generate outcome
-        outcome = cls.generate_final_outcome(outcome_probs, modified_babip)
-        pitches_thrown = PitchCountGenerator.generate_pitches_thrown(outcome)
-        
-        # Execute outcome
-        result = AtBatFactory.execute_outcome(outcome=outcome, gamestate=gamestate, batter=batter, pitcher=pitcher)
-        
-        # Extract result values once (avoid repeated .get() calls)
-        hits = result['hits']
-        runs = result['runs']
-        outs = result['outs']
-        rbis = result['rbis']
-        
-        # Update game state with the result
-        gamestate.add_stats(hits=hits, runs=runs, outs=outs)
-        
-        # Record stats using the outcome data
-        runs_scored = 1 if outcome == Outcome.HR else 0  # Only batter scores on HR
-        StatsManager.record_at_bat(batter, pitcher, outcome, pitches_thrown, runs_scored, rbis, outs)
-    
+    def generate_modified_sequence(cls, gamestate, outcome: Macro):
+        """ Generate a pitch sequence for the given outcome using PitchEngine. """
+        events = []
+        pitches = PE.generate_sequence(outcome)
+        pickoffs = 0
+
+        # Process all pitches except the final one (which ends the at-bat)
+        for pitch in pitches[:-1]:
+            # 0. Check for pickoff attempt (independent of pitch, can happen any time)
+            if gamestate.bases.fst is not None and pickoffs < 2:
+                if get_random() < cls._MICRO_PROBS['P1']:
+                    events.append(AtBatEvent(
+                        event_type=EventType.MICRO, 
+                        event_code=Micro.P1,
+                        event_data={}
+                    ))
+                    pickoffs += 1
+
+            # 1. Add the pitch event
+            events.append(AtBatEvent(
+                event_type=EventType.PITCH, 
+                event_code=pitch, 
+                event_data={}
+            ))
+
+            # 2. Check for micro events after this pitch (only one per pitch)
+            if pitch == Pitch.BL:  # Ball - Wild pitch or Passed ball
+                if get_random() < cls._MICRO_PROBS['WP']:
+                    events.append(AtBatEvent(
+                        event_type=EventType.MICRO, 
+                        event_code=Micro.WP,
+                        event_data={}
+                    ))
+                elif get_random() < cls._MICRO_PROBS['PB']:
+                    events.append(AtBatEvent(
+                        event_type=EventType.MICRO, 
+                        event_code=Micro.PB,
+                        event_data={}
+                    ))
+
+            elif get_random() < cls._MICRO_PROBS['BK']:  # Balk (rare, on any non-ball pitch)
+                events.append(AtBatEvent(
+                    event_type=EventType.MICRO, 
+                    event_code=Micro.BK,
+                    event_data={}
+                ))
+
+            elif pitch != Pitch.FL:
+                if gamestate.bases.fst is not None and gamestate.bases.snd is None: 
+                    if get_random() < cls._MICRO_PROBS['SB']:  # Called strike - Stolen base
+                        events.append(AtBatEvent(
+                            event_type=EventType.MICRO, 
+                            event_code=Micro.SB,
+                            event_data={}
+                        ))
+
+        # Final pitch (ends the at-bat)
+        events.append(AtBatEvent(
+            event_type=EventType.PITCH,
+            event_code=pitches[-1],
+            event_data={}
+        ))
+
+        return events
+
+    @classmethod
+    def simulate_at_bat(cls, gamestate, token):
+        events = []
+
+        probs = cls.generate_matchup_probs(gamestate, token)
+        outcome = cls.generate_macro_outcome(probs)
+        events = cls.generate_modified_sequence(gamestate, outcome)
+
+        # Add the final macro outcome
+        events.append(AtBatEvent(
+            event_type=EventType.MACRO,
+            event_code=outcome,
+            event_data={}
+        ))
+
+        return AtBatResult(events=events)
+
     @staticmethod
-    def step_advance_batter(batting_lineup_mgr):
+    def advance_next_batter(batting_lineup_mgr):
         """ Step 5: Advance to the next batter in the lineup. """       
         batting_lineup_mgr.get_next_batter()
         
