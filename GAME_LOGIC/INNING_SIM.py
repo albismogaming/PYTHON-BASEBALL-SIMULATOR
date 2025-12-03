@@ -1,9 +1,7 @@
 from ATBAT.ATBAT_SIM import AtBatSimulator
 from ATBAT.ATBAT_FACTORY import AtBatFactory
 from TEAM_UTILS.STATS_MANAGER import StatsManager
-from OUTCOME_FILES.STEALING import Stealing
 from UTILITIES.ENUMS import EventType, Pitch
-from UTILITIES.RANDOM import get_random, stl_random
 from UTILITIES.SCOREBOARD import Scoreboard
 
 def simulate_half_inning(gamestate, batting_lineup, pitching_mgr):
