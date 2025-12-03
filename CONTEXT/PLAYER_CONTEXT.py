@@ -4,10 +4,7 @@ from typing import Dict, Optional
 
 @dataclass
 class Player:
-    """
-    Player with stats needed for simulation.
-    Holds raw rates extracted from CSV - OutcomeBuilder will use these for probability calculations.
-    """
+    """ Player with stats needed for simulation. """
     # Identity
     player_id: int
     team_abbrev: str
@@ -19,9 +16,8 @@ class Player:
     throws: str  # L or R
     
     # Raw stats (only used for precomputation, not during simulation)
-    base_stats: Dict[str, float]  # SO, BB, HP, HR, BA (BABIP)
-    hits_stats: Dict[str, float]   # IH, SL, DL, TL
-    outs_stats: Dict[str, float]   # GO, FO, LO, PO
+    stats_vl: Dict[str, float]  # SO, BB, HP, HR, BA (BABIP)
+    stats_vr: Dict[str, float]   # IH, SL, DL, TL
     
     # Additional attributes
     bat_profile: Optional[int] = None  # Batter profile for hit type distribution
@@ -46,42 +42,49 @@ class Player:
     def from_csv_row(row: dict, team_abbrev: str) -> 'Player':
         """ Create Player from CSV row dictionary. """
         # Extract base outcome stats (strikeout, walk, hit by pitch, home run, BABIP)
-        base_stats = {
-            'SO': row['SO'],
-            'BB': row['BB'],
+        stats_vl = {
+            'BA': row['BAvl'],
+            'SO': row['SOvl'],
+            'BB': row['BBvl'],
             'HP': row['HP'],
-            'HR': row['HR'],
-            'BA': row['BABIP']
+            'HR': row['HRvl'],
+            'IH': row['IHvl'],
+            'SL': row['SLvl'],
+            'DL': row['DLvl'],
+            'TL': row['TLvl'],
+            'GO': row['GOvl'],
+            'FO': row['FOvl'],
+            'LO': row['LOvl'],
+            'PO': row['POvl']
         }
-        
-        # Extract hit type distribution (infield hit, single, double, triple)
-        hits_stats = {
-            'IH': row['IH'],
-            'SL': row['SL'],
-            'DL': row['DL'],
-            'TL': row['TL']
-        }
-        
-        # Extract out type distribution (ground out, fly out, line out, pop out)
-        outs_stats = {
-            'GO': row['GO'],
-            'FO': row['FO'],
-            'LO': row['LO'],
-            'PO': row['PO']
+
+        stats_vr = {
+            'BA': row['BAvr'],
+            'SO': row['SOvr'],
+            'BB': row['BBvr'],
+            'HP': row['HP'],
+            'HR': row['HRvr'],
+            'IH': row['IHvr'],
+            'SL': row['SLvr'],
+            'DL': row['DLvr'],
+            'TL': row['TLvr'],
+            'GO': row['GOvr'],
+            'FO': row['FOvr'],
+            'LO': row['LOvr'],
+            'PO': row['POvr']
         }
         
         return Player(
-            player_id=row['player_id'],
+            player_id=row['PLAYER_ID'],
             team_abbrev=team_abbrev,
             first_name=row['FIRST'],
             last_name=row['LAST'],
             age=row['AGE'],
             position=row['POS'],
-            bats=row['B'],
-            throws=row['T'],
-            base_stats=base_stats,
-            hits_stats=hits_stats,
-            outs_stats=outs_stats,
+            bats=row['BAT'],
+            throws=row['THR'],
+            stats_vl=stats_vl,
+            stats_vr=stats_vr,
             bat_profile=row['BAT_PROFILE'],
             average=row['AVG'],
             clutch=row['CLU'],
