@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class InningHalf(Enum):
     TOP = "TOP"
     BOT = "BOT"
@@ -11,35 +12,52 @@ class Base(Enum):
     THD = "3RD"
     HME = "HME"
 
-class Outcome(Enum):
-    """All possible at-bat outcomes"""
-    SO = "STRIKEOUT"
-    BB = "BASE_ON_BALLS"
-    HP = "HIT_BY_PITCH"
-    IH = "INFIELD_HIT"
-    SL = "SINGLE"
-    DL = "DOUBLE"
-    TL = "TRIPLE"
-    HR = "HOMERUN"
-    GO = "GROUNDOUT"
-    FO = "FLYOUT"
-    LO = "LINEOUT"
-    PO = "POPOUT"
+class EventType(Enum):
+    PITCH = "PITCH"
+    MICRO = "MICRO"
+    MACRO = "MACRO"
+    OTHER = "OTHER"
 
-class HitTypes(Enum):
-    GB = "GROUNDBALL"
-    FB = "FLYBALL"
-    LD = "LINEDRIVE"
-    PU = "POPUP"
-
-class PitchResult(Enum):
+class Pitch(Enum):
     """Pitch result codes for pitch sequences"""
-    B = "B"    # Ball
-    C = "C"    # Called strike
-    S = "S"    # Swinging strike
-    F = "F"    # Foul ball
-    H = "H"    # Hit by pitch
-    X = "X"    # Ball in play (contact made)
+    NA = "NA"
+    BL = "B"
+    CS = "C"
+    SW = "S"
+    FL = "F"
+    IP = "X"
+
+class Micro(Enum):
+    """All possible at-bat outcomes"""
+    NA = "NA"
+    WP = "WP"
+    PB = "PB"
+    BK = "BK"
+    SB = "SB"
+    P1 = "P1"
+
+class Macro(Enum):
+    NA = "NA"
+    SO = "SO"
+    BB = "BB"
+    HP = "HP"
+    IH = "IH"
+    SL = "SL"
+    DL = "DL"
+    TL = "TL"
+    HR = "HR"
+    GO = "GO"
+    DP = "DP"
+    FC = "FC"
+    FO = "FO"
+    LO = "LO"
+    PO = "PO"
+    
+class HitTypes(Enum):
+    GB = "GB"
+    FB = "FB"
+    LD = "LD"
+    PU = "PU"
 
 class Positions(Enum):
     """Defensive positions by number"""
@@ -53,3 +71,19 @@ class Positions(Enum):
     _CF = 8
     _RF = 9
     _DH = 0
+
+class StatKey(Enum):
+    """Player stat keys for outcome probability calculations"""
+    BA = "BA"      # Batting average (BABIP)
+    SO = "SO"      # Strikeouts
+    BB = "BB"      # Walks
+    HP = "HP"      # Hit by pitch
+    HR = "HR"      # Home runs
+    IH = "IH"      # Infield hits
+    SL = "SL"      # Singles
+    DL = "DL"      # Doubles
+    TL = "TL"      # Triples
+    GO = "GO"      # Ground outs
+    FO = "FO"      # Fly outs
+    LO = "LO"      # Line outs
+    PO = "PO"      # Pop outs

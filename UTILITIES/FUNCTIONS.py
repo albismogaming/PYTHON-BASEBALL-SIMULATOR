@@ -4,14 +4,7 @@ from typing import Dict
 
 @staticmethod
 def rgb_colored(text, rgb, bg_rgb=None):
-    """
-    Apply RGB color to text, with an optional background color.
-
-    :param text: The text to color.
-    :param rgb: Tuple for the text color (r, g, b).
-    :param bg_rgb: Optional tuple for the background color (r, g, b).
-    :return: Formatted text with RGB color.
-    """
+    """ Apply RGB color to text, with an optional background color. """
     r, g, b = rgb
     if bg_rgb:
         br, bg, bb = bg_rgb
