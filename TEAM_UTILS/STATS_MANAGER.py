@@ -1,6 +1,8 @@
 from typing import Dict, List, Tuple, Optional
 from collections import defaultdict
-from UTILITIES.ENUMS import Outcome
+from CONTEXT.PLAY_CONTEXT import PlayResult
+from UTILITIES.ENUMS import Micro, Macro
+from UTILITIES.STATS_CALCS import StatsCalculator
 
 
 class StatsManager:
@@ -22,7 +24,7 @@ class StatsManager:
         return StatsManager._key_cache[player_id]
     
     @staticmethod
-    def initialize_batter(batter):
+    def _initialize_batter(batter):
         """
         Initialize stats for a batter if not already tracked.
         
@@ -46,22 +48,19 @@ class StatsManager:
                 'SO': 0,      # Strikeouts
                 'HBP': 0,     # Hit by pitch
                 'TB': 0,      # Total bases
+                'SB': 0,      # Stolen bases
+                'CS': 0,      # Caught stealing
             }
     
     @staticmethod
-    def initialize_pitcher(pitcher):
-        """
-        Initialize stats for a pitcher if not already tracked.
-        
-        Args:
-            pitcher: Player object (pitcher)
-        """
+    def _initialize_pitcher(pitcher):
+        """ Initialize stats for a pitcher if not already tracked. """
         key = StatsManager._get_player_key(pitcher)
         if key not in StatsManager.pitcher_stats:
             StatsManager.pitcher_stats[key] = {
                 'player': pitcher,
                 'IP': 0.0,       # Innings pitched (as outs/3)
-                'PT': 0,    # Total pitches thrown
+                'PT': 0,         # Total pitches thrown
                 'H': 0,          # Hits allowed
                 'R': 0,          # Runs allowed
                 'ER': 0,         # Earned runs
@@ -75,102 +74,95 @@ class StatsManager:
     # ==================== RECORD STATS ====================
     
     @staticmethod
-    def record_at_bat(batter, pitcher, outcome: Outcome, pitch_count: int, runs_scored: int = 0, rbi: int = 0, outs_recorded: int = 0):
-        """
-        Record a complete at-bat with all relevant stats.
-        
-        Args:
-            batter: Batter Player object
-            pitcher: Pitcher Player object
-            outcome: Outcome enum value
-            pitch_count: Number of pitches in the at-bat
-            runs_scored: Runs scored by the batter on this play
-            rbi: RBIs credited to the batter
-            outs_recorded: Number of outs recorded on this play (0-2)
-        """
-        StatsManager.initialize_batter(batter)
-        StatsManager.initialize_pitcher(pitcher)
-        
-        # Update batter stats
-        StatsManager._update_batter_stats(batter, outcome, runs_scored, rbi)
-        
-        # Update pitcher stats
-        StatsManager._update_pitcher_stats(pitcher, outcome, pitch_count, outs_recorded)
+    def record_at_bat(result: PlayResult):
+        """ Record a complete at-bat with all relevant stats. """
+        StatsManager._initialize_batter(result.batter)
+        StatsManager._initialize_pitcher(result.pitcher)
+        StatsManager._update_batter_stats(result)
+        StatsManager._update_pitcher_stats(result)
     
     @staticmethod
-    def _update_batter_stats(batter, outcome: Outcome, runs_scored: int, rbi: int):
+    def _update_batter_stats(result: PlayResult):
         """Update batter statistics based on outcome."""
-        key = StatsManager._get_player_key(batter)
+        key = StatsManager._get_player_key(result.batter)
         stats = StatsManager.batter_stats[key]
         
         # Every outcome is a plate appearance
         stats['PA'] += 1
         
         # Determine if it's an at-bat (excludes BB, HP, sacrifices)
-        is_at_bat = outcome not in [Outcome.BB, Outcome.HP]
+        is_at_bat = result.type not in [Macro.BB, Macro.HP]
         
         if is_at_bat:
             stats['AB'] += 1
         
-        if outcome in [Outcome.SL, Outcome.DL, Outcome.TL, Outcome.HR, Outcome.IH]:
+        if result.type in [Macro.SL, Macro.DL, Macro.TL, Macro.HR, Macro.IH]:
             stats['H'] += 1
 
         # Hits
-        if outcome == Outcome.SL or outcome == Outcome.IH:
+        if result.type == Macro.SL or result.type == Macro.IH:
             stats['1B'] += 1
             stats['TB'] += 1
-        elif outcome == Outcome.DL:
+        elif result.type == Macro.DL:
             stats['2B'] += 1
             stats['TB'] += 2
-        elif outcome == Outcome.TL:
+        elif result.type == Macro.TL:
             stats['3B'] += 1
             stats['TB'] += 3
-        elif outcome == Outcome.HR:
+        elif result.type == Macro.HR:
             stats['HR'] += 1
             stats['TB'] += 4
         
         # Other outcomes
-        if outcome == Outcome.SO:
+        if result.type == Macro.SO:
             stats['SO'] += 1
-        elif outcome == Outcome.BB:
+        elif result.type == Macro.BB:
             stats['BB'] += 1
-        elif outcome == Outcome.HP:
+        elif result.type == Macro.HP:
             stats['HBP'] += 1
         
         # Runs and RBI
-        stats['R'] += runs_scored
-        stats['RBI'] += rbi
+        stats['R'] += result.runs
+        stats['RBI'] += result.rbis
     
     @staticmethod
-    def _update_pitcher_stats(pitcher, outcome: Outcome, pitch_count: int, outs_recorded: int):
+    def _update_pitcher_stats(result: PlayResult):
         """Update pitcher statistics based on outcome."""
-        key = StatsManager._get_player_key(pitcher)
+        key = StatsManager._get_player_key(result.pitcher)
         stats = StatsManager.pitcher_stats[key]
         
         # Every at-bat is a batter faced
         stats['BF'] += 1
-        stats['PT'] += pitch_count
         
         # Hits allowed
-        if outcome in [Outcome.SL, Outcome.DL, Outcome.TL, Outcome.HR, Outcome.IH]:
+        if result.type in [Macro.SL, Macro.DL, Macro.TL, Macro.HR, Macro.IH]:
             stats['H'] += 1
         
         # Home runs allowed
-        if outcome == Outcome.HR:
+        if result.type == Macro.HR:
             stats['HR'] += 1
         
         # Walks
-        if outcome == Outcome.BB:
+        if result.type == Macro.BB:
             stats['BB'] += 1
         
         # Strikeouts
-        if outcome == Outcome.SO:
+        if result.type == Macro.SO:
             stats['SO'] += 1
         
         # Outs recorded (can be 0, 1, or 2)
-        stats['Outs'] += outs_recorded
+        stats['Outs'] += result.outs
         stats['IP'] = stats['Outs'] / 3.0
     
+    @staticmethod
+    def record_pitch(pitcher, pitch_count: int = 1):
+        """ Record pitches thrown by pitcher. """
+        StatsManager._initialize_pitcher(pitcher)
+        key = StatsManager._get_player_key(pitcher)
+        stats = StatsManager.pitcher_stats[key]
+        
+        stats['PT'] += pitch_count
+
     @staticmethod
     def record_run_for_pitcher(pitcher, earned: bool = True):
         """
@@ -180,7 +172,7 @@ class StatsManager:
             pitcher: Pitcher Player object
             earned: Whether the run is earned (default True)
         """
-        StatsManager.initialize_pitcher(pitcher)
+        StatsManager._initialize_pitcher(pitcher)
         key = StatsManager._get_player_key(pitcher)
         stats = StatsManager.pitcher_stats[key]
         
@@ -188,76 +180,23 @@ class StatsManager:
         if earned:
             stats['ER'] += 1
     
-    # ==================== CALCULATED STATS ====================
-    
     @staticmethod
-    def get_batting_average(batter) -> float:
-        """Calculate batting average (H / AB)."""
-        key = StatsManager._get_player_key(batter)
-        if key not in StatsManager.batter_stats:
-            return 0.0
+    def record_steal_attempt(runner, success: bool):
+        """
+        Record a stolen base attempt.
+        
+        Args:
+            runner: Player object attempting to steal
+            success: True if stolen base, False if caught stealing
+        """
+        StatsManager._initialize_batter(runner)
+        key = StatsManager._get_player_key(runner)
         stats = StatsManager.batter_stats[key]
-        return stats['H'] / stats['AB'] if stats['AB'] > 0 else 0.0
-    
-    @staticmethod
-    def get_on_base_percentage(batter) -> float:
-        """Calculate on-base percentage (H + BB + HBP) / (AB + BB + HBP)."""
-        key = StatsManager._get_player_key(batter)
-        if key not in StatsManager.batter_stats:
-            return 0.0
-        stats = StatsManager.batter_stats[key]
-        denominator = stats['AB'] + stats['BB'] + stats['HBP']
-        if denominator == 0:
-            return 0.0
-        return (stats['H'] + stats['BB'] + stats['HBP']) / denominator
-    
-    @staticmethod
-    def get_slugging_percentage(batter) -> float:
-        """Calculate slugging percentage (TB / AB)."""
-        key = StatsManager._get_player_key(batter)
-        if key not in StatsManager.batter_stats:
-            return 0.0
-        stats = StatsManager.batter_stats[key]
-        return stats['TB'] / stats['AB'] if stats['AB'] > 0 else 0.0
-    
-    @staticmethod
-    def get_ops(batter) -> float:
-        """Calculate OPS (OBP + SLG)."""
-        return StatsManager.get_on_base_percentage(batter) + StatsManager.get_slugging_percentage(batter)
-    
-    @staticmethod
-    def get_era(pitcher) -> float:
-        """Calculate ERA (ER * 9 / IP)."""
-        key = StatsManager._get_player_key(pitcher)
-        if key not in StatsManager.pitcher_stats:
-            return 0.0
-        stats = StatsManager.pitcher_stats[key]
-        if stats['IP'] == 0:
-            return 0.0
-        return (stats['ER'] * 9) / stats['IP']
-    
-    @staticmethod
-    def get_whip(pitcher) -> float:
-        """Calculate WHIP ((BB + H) / IP)."""
-        key = StatsManager._get_player_key(pitcher)
-        if key not in StatsManager.pitcher_stats:
-            return 0.0
-        stats = StatsManager.pitcher_stats[key]
-        if stats['IP'] == 0:
-            return 0.0
-        return (stats['BB'] + stats['H']) / stats['IP']
-    
-    @staticmethod
-    def format_innings_pitched(pitcher) -> str:
-        """Format innings pitched (e.g., 5.2 for 5 2/3 innings)."""
-        key = StatsManager._get_player_key(pitcher)
-        if key not in StatsManager.pitcher_stats:
-            return "0.0"
-        stats = StatsManager.pitcher_stats[key]
-        outs = stats['Outs']
-        full_innings = outs // 3
-        remaining_outs = outs % 3
-        return f"{full_innings}.{remaining_outs}"
+        
+        if success:
+            stats['SB'] += 1
+        else:
+            stats['CS'] += 1
     
     # ==================== RETRIEVAL ====================
     
@@ -303,15 +242,7 @@ class StatsManager:
     
     @staticmethod
     def format_batting_stats(team_abbrev: Optional[str] = None) -> str:
-        """
-        Format batting stats as a table.
-        
-        Args:
-            team_abbrev: Filter by team (optional)
-        
-        Returns:
-            Formatted string table
-        """
+        """ Format batting stats as a table. """
         if team_abbrev:
             stats_list = StatsManager.get_team_batting_stats(team_abbrev)
         else:
@@ -326,7 +257,7 @@ class StatsManager:
         
         for stats in sorted(stats_list, key=lambda x: x.get('AB', 0), reverse=True):
             player = stats['player']
-            avg = StatsManager.get_batting_average(player)
+            avg = StatsCalculator.get_batting_average(stats)
             
             lines.append(
                 f"{player.full_name:<20} {player.position:<4} "
@@ -340,15 +271,7 @@ class StatsManager:
     
     @staticmethod
     def format_pitching_stats(team_abbrev: Optional[str] = None) -> str:
-        """
-        Format pitching stats as a table.
-        
-        Args:
-            team_abbrev: Filter by team (optional)
-        
-        Returns:
-            Formatted string table
-        """
+        """ Format pitching stats as a table. """
         if team_abbrev:
             stats_list = StatsManager.get_team_pitching_stats(team_abbrev)
         else:
@@ -363,8 +286,8 @@ class StatsManager:
         
         for stats in sorted(stats_list, key=lambda x: x.get('BF', 0), reverse=True):
             player = stats['player']
-            ip_str = StatsManager.format_innings_pitched(player)
-            era = StatsManager.get_era(player)
+            ip_str = StatsCalculator.format_innings_pitched(stats)
+            era = StatsCalculator.get_era(stats)
             
             lines.append(
                 f"{player.full_name:<20} {player.position:<4} "

@@ -1,7 +1,7 @@
 import random
 from typing import List, Optional, Dict
 from CONTEXT.PLAYER_CONTEXT import Player
-
+from TEAM_UTILS.STATS_MANAGER import StatsManager
 
 # Simple pitching limits
 STARTER_PITCH_LIMIT = 95
@@ -14,12 +14,7 @@ class PitchingManager:
     """ Manages pitching staff during a game. """
     
     def __init__(self, pitchers: List[Player]):
-        """
-        Initialize pitching manager with team's pitchers.
-        
-        Args:
-            pitchers: List of Player objects (pitchers only)
-        """
+        """ Initialize pitching manager with team's pitchers. """
         self.all_pitchers = pitchers
         
         # Split starters and relievers by position
@@ -32,15 +27,7 @@ class PitchingManager:
         self.pitchers_used: List[Player] = []
     
     def select_starting_pitcher(self, randomize: bool = True) -> Player:
-        """
-        Select starting pitcher for the game.
-        
-        Args:
-            randomize: If True, randomly select from starters. If False, pick best by ERA/average.
-            
-        Returns:
-            Selected starting pitcher
-        """
+        """ Select starting pitcher for the game. """
         if not self.starting_pitchers:
             raise ValueError("No starting pitchers available")
         
@@ -57,15 +44,7 @@ class PitchingManager:
         return pitcher
 
     def change_pitcher(self, new_pitcher: Optional[Player] = None) -> Player:
-        """
-        Make a pitching change.
-        
-        Args:
-            new_pitcher: Specific pitcher to bring in. If None, selects best available reliever.
-            
-        Returns:
-            New pitcher brought in
-        """
+        """ Make a pitching change. """
         if new_pitcher:
             # Manual pitcher selection
             if new_pitcher in self.pitchers_used:
@@ -123,16 +102,7 @@ class PitchingManager:
         return min(available, key=lambda p: p.average)
     
     def get_pitcher_stats(self, pitcher: Player) -> Dict[str, int]:
-        """
-        Get current game stats for a pitcher.
-        
-        Args:
-            pitcher: The pitcher to get stats for
-            
-        Returns:
-            Dictionary of pitcher stats
-        """
-        from TEAM_UTILS.STATS_MANAGER import StatsManager
+        """ Get current game stats for a pitcher. """
         stats = StatsManager.get_pitcher_stats(pitcher)
         
         if not stats:
@@ -146,23 +116,10 @@ class PitchingManager:
                 'strikeouts': 0
             }
         
-        return {
-            'outs_recorded': stats.get('Outs', 0),
-            'innings_pitched': stats.get('IP', 0.0),
-            'pitches_thrown': stats.get('PT', 0),
-            'runs_allowed': stats.get('R', 0),
-            'hits_allowed': stats.get('H', 0),
-            'walks_issued': stats.get('BB', 0),
-            'strikeouts': stats.get('SO', 0)
-        }
+        return stats
     
     def should_change_pitcher(self) -> bool:
-        """
-        Simple check: change pitcher if they've exceeded pitch count or innings limit.
-        
-        Returns:
-            True if pitching change is needed
-        """
+        """ Simple check: change pitcher if they've exceeded pitch count or innings limit. """
         if not self.current_pitcher:
             return False
         
@@ -175,11 +132,11 @@ class PitchingManager:
         
         # Check limits based on position
         if pitcher.position == 'SP':
-            return (stats['pitches_thrown'] >= STARTER_PITCH_LIMIT or 
-                    stats['innings_pitched'] >= STARTER_INNING_LIMIT)
+            return (stats.get('PT', 0) >= STARTER_PITCH_LIMIT or 
+                    stats.get('IP', 0.0) >= STARTER_INNING_LIMIT)
         else:  # RP
-            return (stats['pitches_thrown'] >= RELIEVER_PITCH_LIMIT or 
-                    stats['innings_pitched'] >= RELIEVER_INNING_LIMIT)
+            return (stats.get('PT', 0) >= RELIEVER_PITCH_LIMIT or 
+                    stats.get('IP', 0.0) >= RELIEVER_INNING_LIMIT)
     
     def reset_for_new_game(self):
         """Reset pitching manager for a new game."""
