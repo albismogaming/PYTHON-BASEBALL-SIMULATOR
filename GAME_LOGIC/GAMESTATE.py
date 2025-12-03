@@ -1,5 +1,8 @@
+from CONTEXT.PLAY_CONTEXT import PlayResult
 from UTILITIES.FILE_PATHS import *
 from UTILITIES.ENUMS import *
+from GAME_LOGIC.BASESTATE import BaseState
+
 
 class GameState:
     def __init__(self, away_team, home_team):
@@ -14,7 +17,7 @@ class GameState:
         self.balls = 0
         self.strikes = 0
         self.outs = 0
-        self.bases = {Base.FST: None, Base.SND: None, Base.THD: None}
+        self.bases = BaseState()
 
         self.hits_hit = 0
         self.runs_scored = 0
@@ -23,6 +26,10 @@ class GameState:
         self.is_walk_off = False
         self.is_inning_over = False
         self.is_game_over = False
+
+        # Direct score tracking for performance (avoid dictionary lookups)
+        self.away_score = 0
+        self.home_score = 0
 
         self.stats = {
             'away_team': {'score': 0, 'hits': 0, 'errors': 0, 'score_by_inning': []},
@@ -37,43 +44,45 @@ class GameState:
     # ============================================================
     # SCORE UPDATE METHODS
     # ============================================================
-    
-    def add_stats(self, hits=0, runs=0, outs=0):
-        """
-        Add hits, runs, and outs in a single call (performance optimization).
-        
-        Args:
-            hits: Number of hits to add
-            runs: Number of runs to add
-            outs: Number of outs to add
-        """
-        if hits:
-            self.stats[self.current_team]['hits'] += hits
-            self.hits_hit += hits
-        if runs:
-            self.stats[self.current_team]['score'] += runs
-            self.runs_scored += runs
-        if outs:
-            self.outs += outs
-    
-    def add_error(self, num_errors=1, team=None):
-        """
-        Add error(s) to a team's total (for fielding team).
-        
-        Args:
-            num_errors: Number of errors to add (default 1)
-            team: Team key. If None, uses the current fielding team
-        """
-        if team is None:
-            # Error is charged to the fielding team (opposite of batting team)
-            team = 'home_team' if self.inninghalf == InningHalf.TOP else 'away_team'
-        
-        self.stats[team]['errors'] += num_errors
+
+    def apply_result(self, result: PlayResult):
+        # 1. Update bases - now directly using BaseState (no dict conversion!)
+        if result.bases_after:
+            self.bases = result.bases_after
+        else:
+            # Fallback: shouldn't happen if outcomes set bases_after correctly
+            print(f"WARNING: {result.type} outcome did not set bases_after!")
+
+        # 2. Update count
+        self.balls += result.balls_delta
+        self.strikes += result.strikes_delta
+
+        if result.hits:
+            self.stats[self.current_team]['hits'] += result.hits
+            self.hits_hit += result.hits
+        if result.runs:
+            self.stats[self.current_team]['score'] += result.runs
+            self.runs_scored += result.runs
+            # Update direct score tracking
+            if self.inninghalf == InningHalf.TOP:
+                self.away_score += result.runs
+            else:
+                self.home_score += result.runs
+        if result.outs:
+            self.outs += result.outs
+        if result.errs:
+            self.stats[self.current_team]['errors'] += result.errs
+            self.errors_made += result.errs
     
     # ============================================================
     # INNING RESET METHODS
     # ============================================================
     
+    def reset_count(self):
+        """ Reset balls and strikes to zero. """
+        self.balls = 0
+        self.strikes = 0
+
     def reset_half_inning(self):
         """
         Reset state for a new half-inning.
@@ -82,7 +91,7 @@ class GameState:
         self.outs = 0
         self.balls = 0
         self.strikes = 0
-        self.bases = {Base.FST: None, Base.SND: None, Base.THD: None}
+        self.bases = BaseState()  # Clear bases only at start of NEW half-inning
         self.hits_hit = 0
         self.runs_scored = 0
         self.pickoffs = 0
@@ -112,7 +121,7 @@ class GameState:
         Updates batting/pitching teams and resets half-inning state.
         """
         self.inninghalf = InningHalf.BOT if self.inninghalf == InningHalf.TOP else InningHalf.TOP
-        self.reset_half_inning()
+        self.reset_half_inning()  # This now clears bases at the half-inning transition
         
         # Update batting and pitching teams
         self.batting_team = self.away_team if self.inninghalf == InningHalf.TOP else self.home_team
@@ -122,37 +131,21 @@ class GameState:
     # GAME CONTEXT METHODS
     # ============================================================
     
-    def get_situation_dict(self):
+    def check_walk_off(self):
         """
-        Get current game situation as a dictionary for token generation.
-        
-        Returns:
-            Dictionary with game context (inning, outs, score, runners, etc.)
+        Check if the current state results in a walk-off win for the home team.
+        Sets is_walk_off and is_game_over flags if conditions are met.
         """
-        return {
-            'inning': self.current_inning,
-            'inning_half': self.inninghalf.value,
-            'outs': self.outs,
-            'balls': self.balls,
-            'strikes': self.strikes,
-            'first_base': self.bases[Base.FST] is not None,
-            'second_base': self.bases[Base.SND] is not None,
-            'third_base': self.bases[Base.THD] is not None,
-            'away_score': self.stats['away_team']['score'],
-            'home_score': self.stats['home_team']['score'],
-            'score_diff': abs(self.stats['away_team']['score'] - self.stats['home_team']['score'])
-        }
+        if self.inninghalf == InningHalf.BOT and self.current_inning >= 9:
+            if self.home_score > self.away_score:
+                self.is_walk_off = True
+                self.is_game_over = True
+                return True
+        return False
     
     def get_base_state(self) -> int:
-        """
-        Get bitwise representation of the current base state.
+        """ Get bitwise representation of the current base state.
         
-        Returns:
-            int: Bitwise base state where:
-                - Bit 0 (value 1): Runner on 1st
-                - Bit 1 (value 2): Runner on 2nd
-                - Bit 2 (value 4): Runner on 3rd
-                
         Examples:
             0 = empty bases
             1 = runner on 1st only
@@ -160,65 +153,16 @@ class GameState:
             7 = bases loaded
         """
         state = 0
-        if self.bases[Base.FST] is not None:
+        if self.bases.get(Base.FST) is not None:
             state |= 1  # Set bit 0
-        if self.bases[Base.SND] is not None:
+        if self.bases.get(Base.SND) is not None:
             state |= 2  # Set bit 1
-        if self.bases[Base.THD] is not None:
+        if self.bases.get(Base.THD) is not None:
             state |= 4  # Set bit 2
         return state
     
-    def get_fielder(self, hit_info):
-        """
-        Get the defensive player who fields the ball based on hit_info.
-        
-        Args:
-            hit_info: HitInfo object with hit_fielder (Positions enum)
-            
-        Returns:
-            Player object at the fielding position, or None if not found
-        """
-        if not hit_info or not hasattr(hit_info, 'hit_fielder'):
-            return None
-        
-        # Map Positions enum to position string
-        position_map = {
-            Positions._SP: 'SP',  # Pitcher
-            Positions._RP: 'RP',  # Relief pitcher (treated as pitcher)
-            Positions._1B: '1B',
-            Positions._2B: '2B',
-            Positions._3B: '3B',
-            Positions._SS: 'SS',
-            Positions._LF: 'LF',
-            Positions._CF: 'CF',
-            Positions._RF: 'RF'
-        }
-        
-        position_str = position_map.get(hit_info.hit_fielder)
-        if not position_str:
-            return None
-        
-        # Special case: Pitcher fielding (SP/RP) - get current pitcher
-        if position_str in ['SP', 'RP']:
-            # Return the current pitcher from pitching team
-            # This requires accessing the pitching manager, which should be passed separately
-            # For now, we'll return None and let the caller handle pitcher lookups
-            return None
-        
-        # Search fielding team's batters for player at this position
-        for player in self.fielding_team.batters:
-            if player.position == position_str:
-                return player
-        
-        return None
-    
     def can_game_end(self):
-        """
-        Check if the game can end based on current state.
-        
-        Returns:
-            bool: True if game can end (walk-off or regulation complete)
-        """
+        """ Check if the game can end based on current state. """       
         # Walk-off already triggered
         if self.is_walk_off:
             self.is_game_over = True
@@ -238,3 +182,17 @@ class GameState:
                 return True
         
         return False
+    
+    def should_end(self, is_macro_outcome: bool = False):
+        """
+        Check if current action or half-inning should end.
+        
+        Args:
+            is_macro_outcome: True if this is the final macro outcome event
+        
+        Returns:
+            Tuple (should_end_half_inning: bool, should_break_atbat: bool)
+        """
+        if self.outs >= 3 or self.can_game_end():
+            return True, is_macro_outcome  # End half-inning, break at-bat if macro
+        return False, False
